@@ -1,0 +1,54 @@
+name: 스터디 데일리 응원
+
+on:
+  schedule:
+    # GitHub Actions cron은 UTC 기준입니다.
+    # 21:55 UTC == 06:55 KST(다음 날). 스케줄 지연을 감안해 정각보다 조금 앞당겼습니다.
+    - cron: "55 21 * * *"
+
+  # Actions 탭에서 수동 실행 가능 (특정 날짜 문구 테스트용)
+  workflow_dispatch:
+    inputs:
+      date:
+        description: "보낼 날짜 (YYYY-MM-DD). 비우면 오늘(KST)"
+        required: false
+        type: string
+      dry_run:
+        description: "실제 전송 없이 출력만 확인"
+        required: false
+        type: boolean
+        default: false
+
+concurrency:
+  group: daily-cheer
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  cheer:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      TZ: Asia/Seoul
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: 응원 문구 전송
+        env:
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+        run: |
+          ARGS=""
+          if [ -n "${{ inputs.date }}" ]; then
+            ARGS="$ARGS --date ${{ inputs.date }}"
+          fi
+          if [ "${{ inputs.dry_run }}" = "true" ]; then
+            ARGS="$ARGS --dry-run"
+          fi
+          python3 scripts/daily_cheer.py $ARGS
