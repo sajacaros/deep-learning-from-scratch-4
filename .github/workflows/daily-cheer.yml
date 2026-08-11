@@ -43,12 +43,15 @@ jobs:
       - name: 응원 문구 전송
         env:
           DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          # 입력값은 셸에 직접 보간하지 않고 환경변수로 받는다 (셸 인젝션 방지)
+          INPUT_DATE: ${{ inputs.date }}
+          INPUT_DRY_RUN: ${{ inputs.dry_run }}
         run: |
-          ARGS=""
-          if [ -n "${{ inputs.date }}" ]; then
-            ARGS="$ARGS --date ${{ inputs.date }}"
+          args=()
+          if [ -n "$INPUT_DATE" ]; then
+            args+=(--date "$INPUT_DATE")
           fi
-          if [ "${{ inputs.dry_run }}" = "true" ]; then
-            ARGS="$ARGS --dry-run"
+          if [ "$INPUT_DRY_RUN" = "true" ]; then
+            args+=(--dry-run)
           fi
-          python3 scripts/daily_cheer.py $ARGS
+          python3 scripts/daily_cheer.py "${args[@]}"

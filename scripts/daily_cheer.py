@@ -108,7 +108,11 @@ def post(webhook: str, embed: dict) -> None:
     req = urllib.request.Request(
         webhook,
         data=payload,
-        headers={"Content-Type": "application/json"},
+        headers={
+            "Content-Type": "application/json",
+            # 기본 UA(Python-urllib/x.y)는 Discord 앞단 Cloudflare가 403으로 막는다.
+            "User-Agent": "daily-cheer-bot/1.0 (+https://github.com/sajacaros/deep-learning-from-scratch-4)",
+        },
         method="POST",
     )
     with urllib.request.urlopen(req, timeout=20) as resp:
