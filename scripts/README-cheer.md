@@ -66,5 +66,5 @@ python3 scripts/daily_cheer.py --date 2026-08-16 --dry-run
 | `holiday` | 공휴일 | 노랑 🎏 |
 | `normal` | 그 외 | 초록 📗 |
 
-제목의 `D-n`과 진행률 막대는 `daily_cheer.py`의 `SCHEDULE`에서 자동 계산되므로
+제목의 `D-n`은 `daily_cheer.py`의 `SCHEDULE`에서 자동 계산되므로
 문구에 직접 쓸 필요가 없습니다.

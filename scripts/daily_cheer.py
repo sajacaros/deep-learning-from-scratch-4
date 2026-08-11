@@ -61,12 +61,6 @@ def next_session(today: dt.date):
     return None
 
 
-def progress(today: dt.date) -> tuple[int, int]:
-    """(완료한 발표 수, 전체 발표 수)"""
-    done = sum(1 for iso, *_ in SCHEDULE if dt.date.fromisoformat(iso) < today)
-    return done, len(SCHEDULE)
-
-
 def build_embed(today: dt.date, entry: dict) -> dict:
     kind = entry.get("type", "normal")
     color, emoji = TYPE_STYLE.get(kind, TYPE_STYLE["normal"])
@@ -83,20 +77,17 @@ def build_embed(today: dt.date, entry: dict) -> dict:
         dday = (d - today).days
         dday_label = "D-DAY" if dday == 0 else f"D-{dday}"
         title = f"{emoji} {date_label} · Chapter {num}. {chapter_title} {dday_label}"
+        footer = f"{path}/" if path else ""
 
-        done, total = progress(today)
-        filled = "■" * done + "□" * (total - done)
-        footer = f"진행률 {filled} {done}/{total}"
-        if path:
-            footer += f"  ·  {path}/"
-
-    return {
+    embed = {
         "title": title,
         "description": entry["msg"],
         "color": color,
-        "footer": {"text": footer},
         "url": REPO_URL,
     }
+    if footer:
+        embed["footer"] = {"text": footer}
+    return embed
 
 
 def post(webhook: str, embed: dict) -> None:
