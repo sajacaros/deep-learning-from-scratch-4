@@ -32,17 +32,17 @@
 
 |파일 |대응 절 |내용 |
 |:--|:--|:--|
-|`ch02/mdp.py` |2.1~2.3 |MDP의 5요소(S, A, p, r, γ)를 출력하고, 정책대로 진행하며 수익 G를 정의 그대로 계산 |
-|`ch02/discount.py` |2.3 |할인율 γ에 따라 어떤 정책이 좋아 보이는지가 달라지는 과정 + 그래프 |
-|`ch02/policy_bruteforce.py` |2.4 |결정적 정책 4가지를 전수 탐색해 최적 정책을 찾고, 이 방식이 왜 확장되지 않는지 확인 |
-|`ch03/bellman_linear.py` |3.1~3.2 |벨만 방정식을 연립일차방정식 `(I − γP)v = r`로 보고 정확해를 구함. 3×4 그리드 월드에서 4장의 반복 계산 결과와 일치함을 검증 |
-|`ch03/bellman_iterative.py` |3.1 |같은 문제를 반복 대입으로 풀어, 오차가 매 반복 정확히 γ배로 줄어드는 것(축소 사상)을 확인 |
-|`ch03/q_function.py` |3.3 |V↔Q 변환과 Q 버전 벨만 방정식을 수치로 검증하고, Q에서 탐욕 정책을 뽑아봄 |
-|`ch03/bellman_optimal.py` |3.4~3.5 |벨만 최적 방정식을 반복 대입·해석적 풀이 두 가지로 풀고, 2장의 전수 탐색 결과와 대조 |
+|`ch02/s01_mdp.py` |2.1~2.3 |MDP의 5요소(S, A, p, r, γ)를 출력하고, 정책대로 진행하며 수익 G를 정의 그대로 계산 |
+|`ch02/s02_discount.py` |2.3 |할인율 γ에 따라 어떤 정책이 좋아 보이는지가 달라지는 과정 + 그래프 |
+|`ch02/s03_policy_bruteforce.py` |2.4 |결정적 정책 4가지를 전수 탐색해 최적 정책을 찾고, 이 방식이 왜 확장되지 않는지 확인 |
+|`ch03/s01_bellman_linear.py` |3.1~3.2 |벨만 방정식을 연립일차방정식 `(I − γP)v = r`로 보고 정확해를 구함. 3×4 그리드 월드에서 4장의 반복 계산 결과와 일치함을 검증 |
+|`ch03/s02_bellman_iterative.py` |3.1 |같은 문제를 반복 대입으로 풀어, 오차가 매 반복 정확히 γ배로 줄어드는 것(축소 사상)을 확인 |
+|`ch03/s03_q_function.py` |3.3 |V↔Q 변환과 Q 버전 벨만 방정식을 수치로 검증하고, Q에서 탐욕 정책을 뽑아봄 |
+|`ch03/s04_bellman_optimal.py` |3.4~3.5 |벨만 최적 방정식을 반복 대입·해석적 풀이 두 가지로 풀고, 2장의 전수 탐색 결과와 대조 |
 
-읽는 순서는 `ch02/mdp.py` → `ch02/discount.py` → `ch02/policy_bruteforce.py` →
-`ch03/bellman_linear.py` → `ch03/bellman_iterative.py` → `ch03/q_function.py` →
-`ch03/bellman_optimal.py`를 권합니다.
+읽는 순서는 `ch02/s01_mdp.py` → `ch02/s02_discount.py` → `ch02/s03_policy_bruteforce.py` →
+`ch03/s01_bellman_linear.py` → `ch03/s02_bellman_iterative.py` → `ch03/s03_q_function.py` →
+`ch03/s04_bellman_optimal.py`를 권합니다.
 2장은 "정책을 전부 만들어보고 고르는" 방식의 한계를 보여주고,
 3장은 그 한계를 벨만 방정식이 어떻게 넘어서는지를 보여주도록 이어집니다.
 
@@ -84,7 +84,7 @@ $ uv sync --group dezero # 7~9장의 DeZero 원본 코드를 돌려보려면
   그래서 `pyproject.toml`에서 CUDA 휠(2.5GB+) 대신 CPU 전용 휠을 받도록 지정해두었습니다.
   GPU를 쓰고 싶다면 `[[tool.uv.index]]`와 `[tool.uv.sources]`의 `torch` 항목만 지우고 다시 `uv sync` 하세요.
 * **DeZero는 기본 설치에서 빠져 있습니다.** 파이토치 구현(`pytorch/` 폴더)이 7~9장을 모두 커버하므로,
-  파이토치만 쓴다면 설치할 필요가 없습니다. 책 본문의 원본 코드(`ch07/*.py`, `ch08/dqn.py`, `ch09/*.py`)를
+  파이토치만 쓴다면 설치할 필요가 없습니다. 책 본문의 원본 코드(`ch07/*.py`, `ch08/s03_dqn.py`, `ch09/*.py`)를
   직접 돌려보고 싶을 때만 `uv sync --group dezero`를 실행하세요.
   참고로 PyPI 버전(0.0.13, 2020년)은 numpy 1.24에서 제거된 `np.int`를 사용해 `import dezero`부터 실패하므로,
   그 부분이 고쳐진 [원저자 저장소](https://github.com/oreilly-japan/deep-learning-from-scratch-3)에서 직접 받도록 설정해두었습니다.
@@ -105,20 +105,20 @@ $ uv sync --group dezero # 7~9장의 DeZero 원본 코드를 돌려보려면
 예제 코드들은 장별로 나눠 저장되어 있습니다. 저장소 루트에서 다음과 같이 실행하세요.
 
 ```bash
-$ uv run python ch01/avg.py
-$ uv run python ch03/bellman_linear.py
-$ uv run python pytorch/dqn.py    # 파이토치 구현
+$ uv run python ch01/s01_avg.py
+$ uv run python ch03/s01_bellman_linear.py
+$ uv run python pytorch/s07_dqn.py    # 파이토치 구현
 ```
 
 7~9장의 DeZero 원본 코드는 `--group dezero`가 필요합니다.
 
 ```bash
 $ uv sync --group dezero
-$ uv run --group dezero python ch08/dqn.py
+$ uv run --group dezero python ch08/s03_dqn.py
 ```
 
 `uv run`을 붙이면 가상환경을 따로 활성화하지 않아도 됩니다.
-활성화해서 쓰고 싶다면 `source .venv/bin/activate` 후 `python ch01/avg.py`로 실행하면 됩니다.
+활성화해서 쓰고 싶다면 `source .venv/bin/activate` 후 `python ch01/s01_avg.py`로 실행하면 됩니다.
 
 ### 파이토치 구현
 
@@ -128,26 +128,26 @@ DeZero를 설치하지 않고도 7~9장을 끝까지 실습할 수 있습니다.
 
 |DeZero 원본 |파이토치 버전 |
 |:--|:--|
-|`ch07/dezero1.py`, `dezero2.py` |`pytorch/torch_basics.py` |
-|`ch07/dezero3.py` |`pytorch/linear_regression.py` |
-|`ch07/dezero4.py` |`pytorch/neural_net.py` |
-|`ch07/q_learning_nn.py` |`pytorch/q_learning_nn.py` |
-|`ch08/gym_play.py` |`pytorch/gym_play.py` |
-|`ch08/replay_buffer.py` |`pytorch/replay_buffer.py` |
-|`ch08/dqn.py` |`pytorch/dqn.py` |
-|`ch09/simple_pg.py` |`pytorch/simple_pg.py` |
-|`ch09/reinforce.py` |`pytorch/reinforce.py` |
-|`ch09/actor_critic.py` |`pytorch/actor_critic.py` |
+|`ch07/s01_dezero1.py`, `ch07/s02_dezero2.py` |`pytorch/s01_torch_basics.py` |
+|`ch07/s03_dezero3.py` |`pytorch/s02_linear_regression.py` |
+|`ch07/s04_dezero4.py` |`pytorch/s03_neural_net.py` |
+|`ch07/s05_q_learning_nn.py` |`pytorch/s04_q_learning_nn.py` |
+|`ch08/s01_gym_play.py` |`pytorch/s05_gym_play.py` |
+|`ch08/s02_replay_buffer.py` |`pytorch/s06_replay_buffer.py` |
+|`ch08/s03_dqn.py` |`pytorch/s07_dqn.py` |
+|`ch09/s01_simple_pg.py` |`pytorch/s08_simple_pg.py` |
+|`ch09/s02_reinforce.py` |`pytorch/s09_reinforce.py` |
+|`ch09/s03_actor_critic.py` |`pytorch/s10_actor_critic.py` |
 
 ### 그래프 창이 뜨지 않을 때
 
 WSL이나 원격 서버처럼 디스플레이가 없는 환경에서는 `MPLBACKEND=Agg`를 붙여 창 없이 실행할 수 있습니다.
 
 ```bash
-$ MPLBACKEND=Agg uv run python ch04/policy_iter.py
+$ MPLBACKEND=Agg uv run python ch04/s05_policy_iter.py
 ```
 
-`render_mode='human'`으로 카트 폴 창을 띄우는 코드(`pytorch/gym_play.py` 등)는 디스플레이가 필요합니다.
+`render_mode='human'`으로 카트 폴 창을 띄우는 코드(`pytorch/s05_gym_play.py` 등)는 디스플레이가 필요합니다.
 WSL이라면 WSLg가 켜져 있으면 그대로 동작합니다.
 
 ---
