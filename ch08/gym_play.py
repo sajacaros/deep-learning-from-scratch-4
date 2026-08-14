@@ -1,8 +1,8 @@
 import numpy as np
-import gym
+import gymnasium as gym
 
 
-env = gym.make('CartPole-v0', render_mode='human')
+env = gym.make('CartPole-v1', render_mode='human')
 state = env.reset()[0]
 done = False
 

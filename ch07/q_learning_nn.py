@@ -109,5 +109,7 @@ Q = {}
 for state in env.states():
     for action in env.action_space:
         q = agent.qnet(one_hot(state))[:, action]
-        Q[state, action] = float(q.data)
+        # numpy 2부터는 크기가 1이어도 1차원 배열을 float()로 바로 바꿀 수 없어
+        # 원소를 명시적으로 꺼낸다(원본은 float(q.data)).
+        Q[state, action] = float(q.data[0])
 env.render_q(Q)

@@ -2,7 +2,7 @@ if '__file__' in globals():
     import os, sys
     sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 import numpy as np
-import gym
+import gymnasium as gym
 from dezero import Model
 from dezero import optimizers
 import dezero.functions as F
@@ -59,7 +59,7 @@ class Agent:
 
 
 episodes = 3000
-env = gym.make('CartPole-v0', render_mode='rgb_array')
+env = gym.make('CartPole-v1', render_mode='rgb_array')
 agent = Agent()
 reward_history = []
 

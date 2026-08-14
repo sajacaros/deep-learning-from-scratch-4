@@ -3,7 +3,7 @@ from collections import deque
 import random
 import matplotlib.pyplot as plt
 import numpy as np
-import gym
+import gymnasium as gym
 from dezero import Model
 from dezero import optimizers
 import dezero.functions as F
@@ -97,7 +97,7 @@ class DQNAgent:  # 에이전트 클래스
 
 episodes = 300      # 에피소드 수
 sync_interval = 20  # 신경망 동기화 주기(20번째 에피소드마다 동기화)
-env = gym.make('CartPole-v0', render_mode='rgb_array')
+env = gym.make('CartPole-v1', render_mode='rgb_array')
 agent = DQNAgent()
 reward_history = [] # 에피소드별 보상 기록
 
