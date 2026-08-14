@@ -4,13 +4,16 @@ from s02_bandit import Agent
 
 
 class NonStatBandit:
-    def __init__(self, arms=10):
+    def __init__(self, arms=10, sigma=0.1):
         self.arms = arms
+        # 진짜 승률이 한 걸음마다 흔들리는 정도. 환경의 성질이지 에이전트가
+        # 고르는 값이 아니다. 0이면 승률이 변하지 않는 정상 문제가 된다.
+        self.sigma = sigma
         self.rates = np.random.rand(arms)
 
     def play(self, arm):
         rate = self.rates[arm]
-        self.rates += 0.1 * np.random.randn(self.arms)  # 노이즈 추가
+        self.rates += self.sigma * np.random.randn(self.arms)  # 노이즈 추가
         if rate > np.random.rand():
             return 1
         else:

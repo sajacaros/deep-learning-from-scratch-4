@@ -29,6 +29,8 @@ if __name__ == '__main__':
     steps = 1000  # 한 실험당 플레이 횟수
     epsilon = 0.1
     alphas = [0.01, 0.1, 0.3, 0.8]
+    env_sigma = 0.1  # 환경이 변하는 속도. epsilon(탐색), alpha(기억)와 달리
+                     # 에이전트가 고르는 값이 아니라 문제가 주어지는 방식이다.
 
     # -------------------------------------------------------------------------
     # 1) 비정상 밴디트에서의 승률 비교
@@ -45,7 +47,7 @@ if __name__ == '__main__':
             else:
                 agent = AlphaAgent(epsilon, float(label.split('=')[1]))
 
-            bandit = NonStatBandit()  # 승률이 조금씩 변하는 비정상 문제
+            bandit = NonStatBandit(sigma=env_sigma)  # 승률이 조금씩 변하는 비정상 문제
             total_reward = 0
             rates = []
 
@@ -75,60 +77,95 @@ if __name__ == '__main__':
     print('나중에는 사실상 학습을 멈춘다.')
 
     # -------------------------------------------------------------------------
-    # 2) 그런데 승률만 봐서는 α의 역할이 잘 안 보인다.
-    #    Q가 '진짜 승률'을 얼마나 잘 따라가는지(추적 오차)를 직접 재본다.
+    # 2) 위 실험은 sigma가 0.1 하나로 고정되어 있다. 그래서 'α는 클수록 좋다'로
+    #    읽히기 쉽지만, 그건 그 환경이 빨리 변하기 때문이다.
+    #    같은 밴디트에서 sigma만 바꿔가며 다시 재본다. 1)과 완전히 같은
+    #    환경·같은 잣대(승률)를 쓴다.
     #
-    #    승률이 sigma 크기로 무작위 보행하는 팔 하나를 두고,
-    #    받은 보상만으로 Q를 갱신하며 |Q - 진짜 승률| 의 평균을 측정한다.
+    #    주의: 승률은 α를 고르는 잣대로는 무디다. ε=0.1 이므로 승률의 천장이
+    #    0.9*(최고 승률) + 0.1*(평균 승률) 로 막혀 있고, α가 0.1만 넘으면
+    #    이미 천장에 붙어 그 위로는 차이가 노이즈에 묻힌다. Q의 순위만 맞으면
+    #    Q가 부정확해도 보상은 만점이기 때문이다.
+    #    대신 '표본 평균 vs 고정값 α'의 역전은 아주 선명하게 나온다.
     # -------------------------------------------------------------------------
-    def tracking_error(alpha, sigma, steps=4000, runs=500, seed=0):
-        """고정값 α로 추정한 Q와 진짜 승률의 평균 절대 오차"""
-        rng = np.random.default_rng(seed)
-        q_true = rng.random(runs)   # 팔의 진짜 승률(실험마다 다름)
-        Q = np.zeros(runs)
-        # 초기 수렴 구간은 빼고 잰다. α가 작을수록 자리를 잡는 데 1/α 걸음쯤
-        # 걸리므로, 이 구간을 넉넉히 잡지 않으면 작은 α가 억울하게 손해를 본다.
-        burn_in = steps // 4
-        error = np.zeros(runs)
+    def steady_rate(agent_kind, sigma, runs=200, steps=1000):
+        """비정상 밴디트에서 뒤쪽 절반 구간의 평균 보상.
 
-        for t in range(steps):
-            reward = (rng.random(runs) < q_true).astype(float)
-            Q += alpha * (reward - Q)                       # [식 1.9]
-            if t >= burn_in:
-                error += np.abs(Q - q_true)
-            # 진짜 승률이 조금씩 흘러간다(sigma=0이면 정상 문제)
-            q_true = np.clip(q_true + sigma * rng.standard_normal(runs), 0.05, 0.95)
+        인수:
+            agent_kind: 'sample average' 이거나 고정값 α(float).
+            sigma (float): 진짜 승률이 한 걸음마다 흔들리는 정도.
+                0이면 승률이 변하지 않는 정상 문제가 된다.
+            runs (int): 평균을 낼 독립 실험 수.
+            steps (int): 한 실험당 플레이 횟수.
 
-        return float(np.mean(error / (steps - burn_in)))
+        반환값:
+            float: 앞쪽 절반(학습이 자리를 잡는 구간)을 빼고 잰 평균 보상.
+                이 구간을 빼지 않으면 초반이 느린 작은 α가 억울하게 손해를
+                본다. 클수록 좋다.
+        """
+        burn_in = steps // 2
+        total = 0.0
 
-    fine_alphas = [0.005, 0.01, 0.03, 0.1, 0.3, 0.8]
-    sigmas = [0.0, 0.005, 0.02, 0.08]  # 승률이 변하는 속도: 안 변함 ~ 빠르게 변함
+        for _ in range(runs):
+            if agent_kind == 'sample average':
+                agent = Agent(epsilon)
+            else:
+                agent = AlphaAgent(epsilon, agent_kind)
 
-    print('\n\n추적 오차 |Q - 진짜 승률| (작을수록 좋음)')
-    print('-' * 62)
+            bandit = NonStatBandit(sigma=sigma)
+            reward_sum = 0
+
+            for step in range(steps):
+                action = agent.get_action()
+                reward = bandit.play(action)
+                agent.update(action, reward)
+                if step >= burn_in:
+                    reward_sum += reward
+
+            total += reward_sum / (steps - burn_in)
+
+        return total / runs
+
+    fine_alphas = [0.01, 0.03, 0.1, 0.3, 0.8]
+    sigmas = [0.0, 0.01, 0.03, 0.1]  # 승률이 변하는 속도: 안 변함 ~ 빠르게 변함
+
+    print('\n\nsigma별 정상 구간 평균 보상 (클수록 좋음)')
+    print('-' * 68)
     print('{:<10}'.format('sigma')
-          + ''.join('{:>10}'.format('a=' + str(a)) for a in fine_alphas))
-    print('-' * 62)
+          + ''.join('{:>9}'.format('a=' + str(a)) for a in fine_alphas)
+          + '{:>13}'.format('sample avg'))
+    print('-' * 68)
 
     grid = {}
+    baseline = {}
     for sigma in sigmas:
-        row = [tracking_error(a, sigma) for a in fine_alphas]
+        row = [steady_rate(a, sigma) for a in fine_alphas]
         grid[sigma] = row
+        baseline[sigma] = steady_rate('sample average', sigma)
         mark = ['  '] * len(row)
-        mark[int(np.argmin(row))] = ' *'
+        mark[int(np.argmax(row))] = ' *'
         print('{:<10}'.format(sigma)
-              + ''.join('{:>8.4f}{}'.format(v, m) for v, m in zip(row, mark)))
-    print('-' * 62)
-    print('(* 는 그 행에서 오차가 가장 작은 α)')
+              + ''.join('{:>7.4f}{}'.format(v, m) for v, m in zip(row, mark))
+              + '{:>13.4f}'.format(baseline[sigma]))
+    print('-' * 68)
+    print('(* 는 그 행에서 승률이 가장 높은 α)')
 
-    best_by_sigma = [fine_alphas[int(np.argmin(grid[s]))] for s in sigmas]
-    print('\n최적 α:', ', '.join('sigma {} -> {}'.format(s, a)
-                                for s, a in zip(sigmas, best_by_sigma)))
-    if best_by_sigma == sorted(best_by_sigma) and best_by_sigma[0] != best_by_sigma[-1]:
-        print('승률이 빨리 변할수록 최적 α가 커진다.')
-        print('빨리 변하는 환경에서는 오래된 보상이 쓸모없어지기 때문이다.')
-    print('\n반대로 승률이 아예 안 변하면(sigma=0) α는 작을수록 좋다.')
-    print('이때는 α를 1/n로 줄여가는 표본 평균 방식이 이론적으로 최선이다.')
+    print('\n표본 평균 vs 그 sigma에서 가장 좋았던 고정값 α')
+    for sigma in sigmas:
+        best = fine_alphas[int(np.argmax(grid[sigma]))]
+        gap = max(grid[sigma]) - baseline[sigma]
+        winner = '고정값 α={}'.format(best) if gap > 0 else '표본 평균'
+        print('  sigma {:<6} 승자: {:<14} (차이 {:+.4f})'.format(
+            sigma, winner, gap))
+
+    print('\n승률이 아예 안 변하면(sigma=0) α를 1/n로 줄여가는 표본 평균 방식이')
+    print('모든 고정값 α를 앞선다. 세상이 변하기 시작해야 비로소 고정값 α가 이긴다.')
+    print('1)에서 α=0.8이 이긴 것은 그 환경이 sigma={}로 빠르게 변하기 때문이지,'
+          .format(env_sigma))
+    print('α가 클수록 좋아서가 아니다.')
+    print('\n고정값 α들끼리의 우열은 승률로는 잘 안 보인다(위 표의 오른쪽 세 열이')
+    print('거의 붙어 있다). α 자체를 고르려면 승률이 아니라 |Q - 진짜 승률| 같은')
+    print('추정 오차를 재야 한다.')
 
     # -------------------------------------------------------------------------
     # 3) 그래프
@@ -141,7 +178,7 @@ if __name__ == '__main__':
         plt.plot(results[label], label=label)
     plt.xlabel('Steps')
     plt.ylabel('Average Rates')
-    plt.title('Non-stationary bandit')
+    plt.title('Non-stationary bandit (sigma = {})'.format(env_sigma))
     plt.legend()
     plt.grid(True)
 
@@ -156,15 +193,26 @@ if __name__ == '__main__':
     plt.legend()
     plt.grid(True)
 
-    # 추적 오차 곡선
+    # sigma별 최적 α
     plt.subplot(2, 2, 3)
-    for sigma in sigmas:
-        plt.plot(fine_alphas, grid[sigma], marker='o', label='sigma = {}'.format(sigma))
+    for i, sigma in enumerate(sigmas):
+        row = grid[sigma]
+        line, = plt.plot(fine_alphas, row, marker='o',
+                         label='sigma = {}'.format(sigma))
+        # 그 행에서 가장 좋은 α를 별로 표시한다
+        best = int(np.argmax(row))
+        plt.plot(fine_alphas[best], row[best], marker='*', markersize=16,
+                 color=line.get_color(), linestyle='none', label='_nolegend_')
+        # 같은 sigma에서 표본 평균 방식이 낸 승률(점선)
+        plt.axhline(baseline[sigma], color=line.get_color(), linestyle=':',
+                    linewidth=1,
+                    label='sample average (dotted)'
+                    if i == len(sigmas) - 1 else '_nolegend_')
     plt.xscale('log')
     plt.xlabel('alpha (log scale)')
-    plt.ylabel('mean |Q - true rate|')
-    plt.title('Best alpha grows as the world changes faster')
-    plt.legend()
+    plt.ylabel('mean reward (2nd half)')
+    plt.title('Fixed alpha beats sample average only when sigma > 0')
+    plt.legend(fontsize=8)
     plt.grid(True)
 
     # Q가 진짜 승률을 따라가는 모습
