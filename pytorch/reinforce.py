@@ -1,16 +1,26 @@
-import numpy as np
-import gym
+"""ch09/reinforce.py(REINFORCE)의 파이토치 + Gymnasium 버전.
+
+simple_pg.py와의 차이는 update() 하나뿐이다.
+simple_pg는 모든 시각의 손실에 '에피소드 전체의 수익 G_0'를 곱하지만,
+REINFORCE는 각 시각 t마다 '그 시점 이후의 수익 G_t'를 곱한다.
+과거의 보상은 지금의 행동과 무관하므로, 이렇게 하면 분산이 줄어든다.
+"""
+if '__file__' in globals():
+    import os, sys
+    sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
+import gymnasium as gym
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
 from torch.distributions import Categorical
+from common.utils import plot_total_reward
 
 
 class Policy(nn.Module):
-    def __init__(self, action_size):
+    def __init__(self, state_size, action_size):
         super().__init__()
-        self.l1 = nn.Linear(4, 128)
+        self.l1 = nn.Linear(state_size, 128)
         self.l2 = nn.Linear(128, action_size)
 
     def forward(self, x):
@@ -20,17 +30,17 @@ class Policy(nn.Module):
 
 
 class Agent:
-    def __init__(self):
+    def __init__(self, state_size=4, action_size=2):
         self.gamma = 0.98
         self.lr = 0.0002
-        self.action_size = 2
+        self.action_size = action_size
 
         self.memory = []
-        self.pi = Policy(self.action_size)
+        self.pi = Policy(state_size, action_size)
         self.optimizer = optim.Adam(self.pi.parameters(), lr=self.lr)
 
     def get_action(self, state):
-        state = torch.tensor(state[np.newaxis, :])
+        state = torch.from_numpy(state).float().unsqueeze(0)
         probs = self.pi(state)
         probs = probs[0]
         m = Categorical(probs)
@@ -43,9 +53,10 @@ class Agent:
 
     def update(self):
         G, loss = 0, 0
+        # 뒤에서부터 거슬러 올라가며 G_t를 만들고, 그때그때 손실에 더한다
         for reward, prob in reversed(self.memory):
             G = reward + self.gamma * G
-            loss += - torch.log(prob) * G
+            loss += -torch.log(prob) * G
 
         self.optimizer.zero_grad()
         loss.backward()
@@ -53,25 +64,33 @@ class Agent:
         self.memory = []
 
 
-env = gym.make('CartPole-v0')
-agent = Agent()
+episodes = 3000
+env = gym.make('CartPole-v1')
+agent = Agent(state_size=env.observation_space.shape[0],
+              action_size=env.action_space.n)
 reward_history = []
 
-for episode in range(3000):
-    state = env.reset()
+for episode in range(episodes):
+    state, info = env.reset()
     done = False
-    sum_reward = 0
+    total_reward = 0
 
     while not done:
         action, prob = agent.get_action(state)
-        next_state, reward, done, info = env.step(action)
+        next_state, reward, terminated, truncated, info = env.step(action)
+        done = terminated or truncated
 
         agent.add(reward, prob)
         state = next_state
-        sum_reward += reward
+        total_reward += reward
 
     agent.update()
 
-    reward_history.append(sum_reward)
+    reward_history.append(total_reward)
     if episode % 100 == 0:
-        print("episode :{}, total reward : {:.1f}".format(episode, sum_reward))
+        print("episode :{}, total reward : {:.1f}".format(episode, total_reward))
+
+env.close()
+
+# [그림 9-5] 에피소드별 보상 합계 추이
+plot_total_reward(reward_history)
