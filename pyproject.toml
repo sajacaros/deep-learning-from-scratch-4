@@ -1,0 +1,47 @@
+[project]
+name = "deep-learning-from-scratch-4"
+version = "0.1.0"
+description = "『밑바닥부터 시작하는 딥러닝 4』 예제 코드 실행 환경"
+requires-python = "==3.12.*"
+dependencies = [
+    "numpy>=2.1",
+    "matplotlib>=3.9",
+    "torch>=2.6",
+    "gymnasium[classic-control]>=1.0",
+]
+
+[dependency-groups]
+dev = [
+    "ipykernel>=6.29",
+    "jupyter>=1.1",
+]
+# ch07~ch09의 DeZero 원본 코드를 실행할 때만 필요 (선택)
+#   uv sync --group dezero
+#
+# 기본 의존성에 두지 않는 이유: 아래 [tool.uv.sources]에서 보듯 GitHub 저장소를
+# 직접 받아오기 때문에, 기본 `uv sync`가 매번 네트워크에 의존하게 되는 것을 피한다.
+# 파이토치 구현(pytorch/ 폴더)만 쓴다면 이 그룹은 설치하지 않아도 된다.
+dezero = [
+    "dezero",
+]
+
+[tool.uv]
+# 라이브러리가 아니라 장별 스크립트 모음이므로 자기 자신을 설치하지 않는다.
+package = false
+
+# GPU가 없는 환경이므로 CUDA 휠(2.5GB+) 대신 CPU 전용 휠을 사용한다.
+# GPU를 쓰려면 아래 index/sources 블록을 지우고 `uv sync`를 다시 실행하면 된다.
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
+
+[tool.uv.sources]
+torch = [{ index = "pytorch-cpu" }]
+# PyPI의 dezero 0.0.13(2020년)은 numpy 1.24에서 제거된 `np.int`를 사용해
+# `import dezero` 단계에서 바로 실패한다. 그 부분이 고쳐진 원저자 저장소를 쓴다.
+dezero = { git = "https://github.com/oreilly-japan/deep-learning-from-scratch-3" }
+
+# dezero의 setup.py가 dezero 패키지 자신을 import하므로 빌드 시점에 그 의존성이 필요하다.
+[tool.uv.extra-build-dependencies]
+dezero = ["numpy", "matplotlib"]

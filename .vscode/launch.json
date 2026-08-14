@@ -1,0 +1,32 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      // 아무 챕터 파일이나 열어놓고 F5를 누르면 저장소 루트를 작업 디렉터리로 실행된다.
+      "name": "Python: 현재 파일",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${file}",
+      "console": "integratedTerminal",
+      "cwd": "${workspaceFolder}",
+      "env": {
+        "PYTHONPATH": "${workspaceFolder}"
+      },
+      "justMyCode": false
+    },
+    {
+      // 그래프 창이 뜨지 않는 환경(순수 CLI, 원격 접속 등)에서 사용.
+      "name": "Python: 현재 파일 (그래프 창 없이)",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${file}",
+      "console": "integratedTerminal",
+      "cwd": "${workspaceFolder}",
+      "env": {
+        "PYTHONPATH": "${workspaceFolder}",
+        "MPLBACKEND": "Agg"
+      },
+      "justMyCode": false
+    }
+  ]
+}

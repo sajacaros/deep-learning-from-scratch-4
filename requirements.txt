@@ -1,0 +1,17 @@
+# 의존성은 pyproject.toml에서 관리합니다.
+#
+#   uv sync                # .venv 생성 + 설치
+#   uv sync --group dev    # 주피터 노트북까지
+#   uv sync --group dezero # 7~9장의 DeZero 원본 코드까지 (선택)
+#
+# uv 없이 pip으로 설치하려면 (파이썬 3.12 권장):
+#
+#   pip install numpy matplotlib gymnasium[classic-control]
+#   pip install torch --index-url https://download.pytorch.org/whl/cpu
+#
+# DeZero(선택)까지 쓰려면:
+#
+#   pip install git+https://github.com/oreilly-japan/deep-learning-from-scratch-3
+#
+# ※ PyPI의 dezero 0.0.13은 numpy 1.24에서 제거된 np.int를 사용해 import부터
+#    실패하므로, 위와 같이 원저자 저장소에서 직접 설치해야 합니다.
