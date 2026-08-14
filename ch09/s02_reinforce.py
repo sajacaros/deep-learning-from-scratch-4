@@ -56,32 +56,33 @@ class Agent:
         self.memory = []
 
 
-episodes = 3000
-env = gym.make('CartPole-v1', render_mode='rgb_array')
-agent = Agent()
-reward_history = []
+if __name__ == '__main__':
+    episodes = 3000
+    env = gym.make('CartPole-v1', render_mode='rgb_array')
+    agent = Agent()
+    reward_history = []
 
-for episode in range(episodes):
-    state = env.reset()[0]
-    done = False
-    sum_reward = 0
+    for episode in range(episodes):
+        state = env.reset()[0]
+        done = False
+        sum_reward = 0
 
-    while not done:
-        action, prob = agent.get_action(state)
-        next_state, reward, terminated, truncated, info = env.step(action)
-        done = terminated | truncated
+        while not done:
+            action, prob = agent.get_action(state)
+            next_state, reward, terminated, truncated, info = env.step(action)
+            done = terminated | truncated
 
-        agent.add(reward, prob)
-        state = next_state
-        sum_reward += reward
+            agent.add(reward, prob)
+            state = next_state
+            sum_reward += reward
 
-    agent.update()
+        agent.update()
 
-    reward_history.append(sum_reward)
-    if episode % 100 == 0:
-        print("episode :{}, total reward : {:.1f}".format(episode, sum_reward))
+        reward_history.append(sum_reward)
+        if episode % 100 == 0:
+            print("episode :{}, total reward : {:.1f}".format(episode, sum_reward))
 
 
-# [그림 9-4]의 왼쪽 그래프
-from common.utils import plot_total_reward
-plot_total_reward(reward_history)
+    # [그림 9-4]의 왼쪽 그래프
+    from common.utils import plot_total_reward
+    plot_total_reward(reward_history)

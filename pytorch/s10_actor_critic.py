@@ -1,4 +1,4 @@
-"""ch09/actor_critic.py(행위자-비평자)의 파이토치 + Gymnasium 버전."""
+"""ch09/s03_actor_critic.py(행위자-비평자)의 파이토치 + Gymnasium 버전."""
 if '__file__' in globals():
     import os, sys
     sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
@@ -81,34 +81,35 @@ class Agent:
         self.optimizer_pi.step()
 
 
-episodes = 2000
-env = gym.make('CartPole-v1')
-agent = Agent(state_size=env.observation_space.shape[0],
-              action_size=env.action_space.n)
-reward_history = []
+if __name__ == '__main__':
+    episodes = 2000
+    env = gym.make('CartPole-v1')
+    agent = Agent(state_size=env.observation_space.shape[0],
+                  action_size=env.action_space.n)
+    reward_history = []
 
-for episode in range(episodes):
-    state, info = env.reset()
-    done = False
-    total_reward = 0
+    for episode in range(episodes):
+        state, info = env.reset()
+        done = False
+        total_reward = 0
 
-    while not done:
-        action, prob = agent.get_action(state)
-        next_state, reward, terminated, truncated, info = env.step(action)
-        done = terminated or truncated
+        while not done:
+            action, prob = agent.get_action(state)
+            next_state, reward, terminated, truncated, info = env.step(action)
+            done = terminated or truncated
 
-        # 부트스트랩에는 terminated만 쓴다.
-        # 제한 시간에 걸려 잘린 경우(truncated)는 다음 상태의 가치를 살려야 한다.
-        agent.update(state, prob, reward, next_state, terminated)
+            # 부트스트랩에는 terminated만 쓴다.
+            # 제한 시간에 걸려 잘린 경우(truncated)는 다음 상태의 가치를 살려야 한다.
+            agent.update(state, prob, reward, next_state, terminated)
 
-        state = next_state
-        total_reward += reward
+            state = next_state
+            total_reward += reward
 
-    reward_history.append(total_reward)
-    if episode % 100 == 0:
-        print("episode :{}, total reward : {:.1f}".format(episode, total_reward))
+        reward_history.append(total_reward)
+        if episode % 100 == 0:
+            print("episode :{}, total reward : {:.1f}".format(episode, total_reward))
 
-env.close()
+    env.close()
 
-# [그림 9-9] 에피소드별 보상 합계 추이
-plot_total_reward(reward_history)
+    # [그림 9-9] 에피소드별 보상 합계 추이
+    plot_total_reward(reward_history)

@@ -30,20 +30,21 @@ class QLearningAgent:
         self.Q[state, action] += (target - self.Q[state, action]) * self.alpha
 
 
-env = GridWorld()
-agent = QLearningAgent()
+if __name__ == '__main__':
+    env = GridWorld()
+    agent = QLearningAgent()
 
-episodes = 1000
-for episode in range(episodes):
-    state = env.reset()
+    episodes = 1000
+    for episode in range(episodes):
+        state = env.reset()
 
-    while True:
-        action = agent.get_action(state)
-        next_state, reward, done = env.step(action)
+        while True:
+            action = agent.get_action(state)
+            next_state, reward, done = env.step(action)
 
-        agent.update(state, action, reward, next_state, done)
-        if done:
-            break
-        state = next_state
+            agent.update(state, action, reward, next_state, done)
+            if done:
+                break
+            state = next_state
 
-env.render_q(agent.Q)
+    env.render_q(agent.Q)

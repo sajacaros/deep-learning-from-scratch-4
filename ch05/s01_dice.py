@@ -8,11 +8,12 @@ def sample(dices=2):
     return x
 
 
-trial = 1000
-V, n = 0, 0
+if __name__ == '__main__':
+    trial = 1000
+    V, n = 0, 0
 
-for _ in range(trial):
-    s = sample()
-    n += 1
-    V += (s - V) / n
-    print(V)
+    for _ in range(trial):
+        s = sample()
+        n += 1
+        V += (s - V) / n
+        print(V)

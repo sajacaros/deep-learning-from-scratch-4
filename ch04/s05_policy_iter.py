@@ -3,7 +3,7 @@ if '__file__' in globals():
     sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 from collections import defaultdict
 from common.gridworld import GridWorld
-from ch04.policy_eval import policy_eval
+from ch04.s04_policy_eval import policy_eval
 
 
 def argmax(d):

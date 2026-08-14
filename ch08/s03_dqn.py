@@ -95,13 +95,45 @@ class DQNAgent:  # 에이전트 클래스
     def sync_qnet(self):  # 두 신경망 동기화
         self.qnet_target = copy.deepcopy(self.qnet)
 
-episodes = 300      # 에피소드 수
-sync_interval = 20  # 신경망 동기화 주기(20번째 에피소드마다 동기화)
-env = gym.make('CartPole-v1', render_mode='rgb_array')
-agent = DQNAgent()
-reward_history = [] # 에피소드별 보상 기록
 
-for episode in range(episodes):
+if __name__ == '__main__':
+    episodes = 300      # 에피소드 수
+    sync_interval = 20  # 신경망 동기화 주기(20번째 에피소드마다 동기화)
+    env = gym.make('CartPole-v1', render_mode='rgb_array')
+    agent = DQNAgent()
+    reward_history = [] # 에피소드별 보상 기록
+
+    for episode in range(episodes):
+        state = env.reset()[0]
+        done = False
+        total_reward = 0
+
+        while not done:
+            action = agent.get_action(state)
+            next_state, reward, terminated, truncated, info = env.step(action)
+            done = terminated | truncated
+
+            agent.update(state, action, reward, next_state, done)
+            state = next_state
+            total_reward += reward
+
+        if episode % sync_interval == 0:
+            agent.sync_qnet()
+
+        reward_history.append(total_reward)
+        if episode % 10 == 0:
+            print("episode :{}, total reward : {}".format(episode, total_reward))
+
+
+    # [그림 8-8] 「카트 폴」에서 에피소드별 보상 총합의 추이
+    plt.xlabel('Episode')
+    plt.ylabel('Total Reward')
+    plt.plot(range(len(reward_history)), reward_history)
+    plt.show()
+
+
+    # 학습이 끝난 에이전트에 탐욕 행동을 선택하도록 하여 플레이
+    agent.epsilon = 0  # 탐욕 정책(무작위로 행동할 확률 ε을 0로 설정)
     state = env.reset()[0]
     done = False
     total_reward = 0
@@ -110,37 +142,7 @@ for episode in range(episodes):
         action = agent.get_action(state)
         next_state, reward, terminated, truncated, info = env.step(action)
         done = terminated | truncated
-
-        agent.update(state, action, reward, next_state, done)
         state = next_state
         total_reward += reward
-
-    if episode % sync_interval == 0:
-        agent.sync_qnet()
-
-    reward_history.append(total_reward)
-    if episode % 10 == 0:
-        print("episode :{}, total reward : {}".format(episode, total_reward))
-
-
-# [그림 8-8] 「카트 폴」에서 에피소드별 보상 총합의 추이
-plt.xlabel('Episode')
-plt.ylabel('Total Reward')
-plt.plot(range(len(reward_history)), reward_history)
-plt.show()
-
-
-# 학습이 끝난 에이전트에 탐욕 행동을 선택하도록 하여 플레이
-agent.epsilon = 0  # 탐욕 정책(무작위로 행동할 확률 ε을 0로 설정)
-state = env.reset()[0]
-done = False
-total_reward = 0
-
-while not done:
-    action = agent.get_action(state)
-    next_state, reward, terminated, truncated, info = env.step(action)
-    done = terminated | truncated
-    state = next_state
-    total_reward += reward
-    env.render()
-print('Total Reward:', total_reward)
+        env.render()
+    print('Total Reward:', total_reward)

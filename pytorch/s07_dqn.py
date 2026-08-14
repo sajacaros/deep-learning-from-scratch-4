@@ -1,4 +1,4 @@
-"""ch08/dqn.py 의 파이토치 + Gymnasium 버전."""
+"""ch08/s03_dqn.py 의 파이토치 + Gymnasium 버전."""
 if '__file__' in globals():
     import os, sys
     sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
@@ -104,14 +104,52 @@ class DQNAgent:  # 에이전트 클래스
         self.qnet_target.load_state_dict(self.qnet.state_dict())
 
 
-episodes = 300      # 에피소드 수
-sync_interval = 20  # 신경망 동기화 주기(20번째 에피소드마다 동기화)
-env = gym.make('CartPole-v1')
-agent = DQNAgent(state_size=env.observation_space.shape[0],
-                 action_size=env.action_space.n)
-reward_history = []  # 에피소드별 보상 기록
+if __name__ == '__main__':
+    episodes = 300      # 에피소드 수
+    sync_interval = 20  # 신경망 동기화 주기(20번째 에피소드마다 동기화)
+    env = gym.make('CartPole-v1')
+    agent = DQNAgent(state_size=env.observation_space.shape[0],
+                     action_size=env.action_space.n)
+    reward_history = []  # 에피소드별 보상 기록
 
-for episode in range(episodes):
+    for episode in range(episodes):
+        state, info = env.reset()
+        done = False
+        total_reward = 0
+
+        while not done:
+            action = agent.get_action(state)
+            next_state, reward, terminated, truncated, info = env.step(action)
+            done = terminated or truncated
+
+            # 부트스트랩에는 terminated만 쓴다.
+            # 제한 시간에 걸려 잘린 것(truncated)은 '가치가 0인 종료'가 아니라
+            # 에피소드를 여기서 끊었을 뿐이므로 다음 상태의 가치를 그대로 살려야 한다.
+            agent.update(state, action, reward, next_state, terminated)
+            state = next_state
+            total_reward += reward
+
+        if episode % sync_interval == 0:
+            agent.sync_qnet()
+
+        reward_history.append(total_reward)
+        if episode % 10 == 0:
+            print("episode :{}, total reward : {}".format(episode, total_reward))
+
+    env.close()
+
+
+    # [그림 8-8] 「카트 폴」에서 에피소드별 보상 총합의 추이
+    plt.xlabel('Episode')
+    plt.ylabel('Total Reward')
+    plt.plot(range(len(reward_history)), reward_history)
+    plt.show()
+
+
+    # 학습이 끝난 에이전트에 탐욕 행동을 선택하도록 하여 플레이
+    # 창을 띄우려면 render_mode='human'으로 환경을 다시 만든다.
+    agent.epsilon = 0  # 탐욕 정책(무작위로 행동할 확률 ε을 0으로 설정)
+    env = gym.make('CartPole-v1', render_mode='human')
     state, info = env.reset()
     done = False
     total_reward = 0
@@ -120,44 +158,7 @@ for episode in range(episodes):
         action = agent.get_action(state)
         next_state, reward, terminated, truncated, info = env.step(action)
         done = terminated or truncated
-
-        # 부트스트랩에는 terminated만 쓴다.
-        # 제한 시간에 걸려 잘린 것(truncated)은 '가치가 0인 종료'가 아니라
-        # 에피소드를 여기서 끊었을 뿐이므로 다음 상태의 가치를 그대로 살려야 한다.
-        agent.update(state, action, reward, next_state, terminated)
         state = next_state
         total_reward += reward
-
-    if episode % sync_interval == 0:
-        agent.sync_qnet()
-
-    reward_history.append(total_reward)
-    if episode % 10 == 0:
-        print("episode :{}, total reward : {}".format(episode, total_reward))
-
-env.close()
-
-
-# [그림 8-8] 「카트 폴」에서 에피소드별 보상 총합의 추이
-plt.xlabel('Episode')
-plt.ylabel('Total Reward')
-plt.plot(range(len(reward_history)), reward_history)
-plt.show()
-
-
-# 학습이 끝난 에이전트에 탐욕 행동을 선택하도록 하여 플레이
-# 창을 띄우려면 render_mode='human'으로 환경을 다시 만든다.
-agent.epsilon = 0  # 탐욕 정책(무작위로 행동할 확률 ε을 0으로 설정)
-env = gym.make('CartPole-v1', render_mode='human')
-state, info = env.reset()
-done = False
-total_reward = 0
-
-while not done:
-    action = agent.get_action(state)
-    next_state, reward, terminated, truncated, info = env.step(action)
-    done = terminated or truncated
-    state = next_state
-    total_reward += reward
-env.close()
-print('Total Reward:', total_reward)
+    env.close()
+    print('Total Reward:', total_reward)

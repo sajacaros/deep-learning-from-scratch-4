@@ -43,25 +43,26 @@ class SarsaAgent:
         self.pi[state] = greedy_probs(self.Q, state, self.epsilon)
 
 
-env = GridWorld()
-agent = SarsaAgent()
+if __name__ == '__main__':
+    env = GridWorld()
+    agent = SarsaAgent()
 
-episodes = 10000
-for episode in range(episodes):
-    state = env.reset()
-    agent.reset()
+    episodes = 10000
+    for episode in range(episodes):
+        state = env.reset()
+        agent.reset()
 
-    while True:
-        action = agent.get_action(state)
-        next_state, reward, done = env.step(action)
+        while True:
+            action = agent.get_action(state)
+            next_state, reward, done = env.step(action)
 
-        agent.update(state, action, reward, done)  # 매번 호출
+            agent.update(state, action, reward, done)  # 매번 호출
 
-        if done:
-            # 목표에 도달했을 때도 호출
-            agent.update(next_state, None, None, None)
-            break
-        state = next_state
+            if done:
+                # 목표에 도달했을 때도 호출
+                agent.update(next_state, None, None, None)
+                break
+            state = next_state
 
-# [그림 6-7] SARSA로 얻은 결과
-env.render_q(agent.Q)
+    # [그림 6-7] SARSA로 얻은 결과
+    env.render_q(agent.Q)

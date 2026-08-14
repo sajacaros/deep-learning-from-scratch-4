@@ -47,23 +47,24 @@ class McOffPolicyAgent:
             self.b[state] = greedy_probs(self.Q, state, self.epsilon)
 
 
-env = GridWorld()
-agent = McOffPolicyAgent()
+if __name__ == '__main__':
+    env = GridWorld()
+    agent = McOffPolicyAgent()
 
-episodes = 10000
-for episode in range(episodes):
-    state = env.reset()
-    agent.reset()
+    episodes = 10000
+    for episode in range(episodes):
+        state = env.reset()
+        agent.reset()
 
-    while True:
-        action = agent.get_action(state)
-        next_state, reward, done = env.step(action)
+        while True:
+            action = agent.get_action(state)
+            next_state, reward, done = env.step(action)
 
-        agent.add(state, action, reward)
-        if done:
-            agent.update()
-            break
+            agent.add(state, action, reward)
+            if done:
+                agent.update()
+                break
 
-        state = next_state
+            state = next_state
 
-env.render_q(agent.Q)
+    env.render_q(agent.Q)

@@ -37,24 +37,25 @@ class RandomAgent:
             self.V[state] += (G - self.V[state]) / self.cnts[state]
 
 
-env = GridWorld()
-agent = RandomAgent()
+if __name__ == '__main__':
+    env = GridWorld()
+    agent = RandomAgent()
 
-episodes = 1000
-for episode in range(episodes):  # 에피소드 1000번 수행
-    state = env.reset()
-    agent.reset()
+    episodes = 1000
+    for episode in range(episodes):  # 에피소드 1000번 수행
+        state = env.reset()
+        agent.reset()
 
-    while True:
-        action = agent.get_action(state)             # 행동 선택
-        next_state, reward, done = env.step(action)  # 행동 수행
+        while True:
+            action = agent.get_action(state)             # 행동 선택
+            next_state, reward, done = env.step(action)  # 행동 수행
 
-        agent.add(state, action, reward)  # (상태, 행동, 보상) 저장
-        if done:   # 목표에 도달 시
-            agent.eval()  # 몬테카를로법으로 가치 함수 갱신
-            break         # 다음 에피소드 시작
+            agent.add(state, action, reward)  # (상태, 행동, 보상) 저장
+            if done:   # 목표에 도달 시
+                agent.eval()  # 몬테카를로법으로 가치 함수 갱신
+                break         # 다음 에피소드 시작
 
-        state = next_state
+            state = next_state
 
-# [그림 5-12] 몬테카를로법으로 얻은 가치 함수
-env.render_v(agent.V)
+    # [그림 5-12] 몬테카를로법으로 얻은 가치 함수
+    env.render_v(agent.V)

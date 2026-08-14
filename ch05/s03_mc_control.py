@@ -53,24 +53,25 @@ class McAgent:
             self.pi[state] = greedy_probs(self.Q, state, self.epsilon)
 
 
-env = GridWorld()
-agent = McAgent()
+if __name__ == '__main__':
+    env = GridWorld()
+    agent = McAgent()
 
-episodes = 10000
-for episode in range(episodes):
-    state = env.reset()
-    agent.reset()
+    episodes = 10000
+    for episode in range(episodes):
+        state = env.reset()
+        agent.reset()
 
-    while True:
-        action = agent.get_action(state)
-        next_state, reward, done = env.step(action)
+        while True:
+            action = agent.get_action(state)
+            next_state, reward, done = env.step(action)
 
-        agent.add(state, action, reward)
-        if done:
-            agent.update()
-            break
+            agent.add(state, action, reward)
+            if done:
+                agent.update()
+                break
 
-        state = next_state
+            state = next_state
 
-# [그림 5-17] 및 [그림 5-18]
-env.render_q(agent.Q)
+    # [그림 5-17] 및 [그림 5-18]
+    env.render_q(agent.Q)

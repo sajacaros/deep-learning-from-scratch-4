@@ -58,32 +58,33 @@ class Agent:
         self.memory = []  # 메모리 초기화
 
 
-episodes = 3000
-env = gym.make('CartPole-v1', render_mode='rgb_array')
-agent = Agent()
-reward_history = []
+if __name__ == '__main__':
+    episodes = 3000
+    env = gym.make('CartPole-v1', render_mode='rgb_array')
+    agent = Agent()
+    reward_history = []
 
-for episode in range(episodes):
-    state = env.reset()[0]
-    done = False
-    total_reward = 0
+    for episode in range(episodes):
+        state = env.reset()[0]
+        done = False
+        total_reward = 0
 
-    while not done:
-        action, prob = agent.get_action(state)  # 행동 선택
-        next_state, reward, terminated, truncated, info = env.step(action)  # 행동 수행
-        done = terminated | truncated
+        while not done:
+            action, prob = agent.get_action(state)  # 행동 선택
+            next_state, reward, terminated, truncated, info = env.step(action)  # 행동 수행
+            done = terminated | truncated
 
-        agent.add(reward, prob)  # 보상과 행동의 확률을 에이전트에 추가
-        state = next_state       # 상태 전이
-        total_reward += reward   # 보상 총합 계산
+            agent.add(reward, prob)  # 보상과 행동의 확률을 에이전트에 추가
+            state = next_state       # 상태 전이
+            total_reward += reward   # 보상 총합 계산
 
-    agent.update()  # 정책 갱신
+        agent.update()  # 정책 갱신
 
-    reward_history.append(total_reward)
-    if episode % 100 == 0:
-        print("episode :{}, total reward : {:.1f}".format(episode, total_reward))
+        reward_history.append(total_reward)
+        if episode % 100 == 0:
+            print("episode :{}, total reward : {:.1f}".format(episode, total_reward))
 
 
-# [그림 9-2] 에피소드별 보상 합계 추이
-from common.utils import plot_total_reward
-plot_total_reward(reward_history)
+    # [그림 9-2] 에피소드별 보상 합계 추이
+    from common.utils import plot_total_reward
+    plot_total_reward(reward_history)

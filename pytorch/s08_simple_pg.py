@@ -1,4 +1,4 @@
-"""ch09/simple_pg.py(가장 간단한 정책 경사법)의 파이토치 + Gymnasium 버전."""
+"""ch09/s01_simple_pg.py(가장 간단한 정책 경사법)의 파이토치 + Gymnasium 버전."""
 if '__file__' in globals():
     import os, sys
     sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
@@ -59,33 +59,34 @@ class Agent:
         self.memory = []  # 메모리 초기화
 
 
-episodes = 3000
-env = gym.make('CartPole-v1')
-agent = Agent(state_size=env.observation_space.shape[0],
-              action_size=env.action_space.n)
-reward_history = []
+if __name__ == '__main__':
+    episodes = 3000
+    env = gym.make('CartPole-v1')
+    agent = Agent(state_size=env.observation_space.shape[0],
+                  action_size=env.action_space.n)
+    reward_history = []
 
-for episode in range(episodes):
-    state, info = env.reset()
-    done = False
-    total_reward = 0
+    for episode in range(episodes):
+        state, info = env.reset()
+        done = False
+        total_reward = 0
 
-    while not done:
-        action, prob = agent.get_action(state)  # 행동 선택
-        next_state, reward, terminated, truncated, info = env.step(action)  # 행동 수행
-        done = terminated or truncated
+        while not done:
+            action, prob = agent.get_action(state)  # 행동 선택
+            next_state, reward, terminated, truncated, info = env.step(action)  # 행동 수행
+            done = terminated or truncated
 
-        agent.add(reward, prob)  # 보상과 행동의 확률을 에이전트에 추가
-        state = next_state       # 상태 전이
-        total_reward += reward   # 보상 총합 계산
+            agent.add(reward, prob)  # 보상과 행동의 확률을 에이전트에 추가
+            state = next_state       # 상태 전이
+            total_reward += reward   # 보상 총합 계산
 
-    agent.update()  # 정책 갱신
+        agent.update()  # 정책 갱신
 
-    reward_history.append(total_reward)
-    if episode % 100 == 0:
-        print("episode :{}, total reward : {:.1f}".format(episode, total_reward))
+        reward_history.append(total_reward)
+        if episode % 100 == 0:
+            print("episode :{}, total reward : {:.1f}".format(episode, total_reward))
 
-env.close()
+    env.close()
 
-# [그림 9-2] 에피소드별 보상 합계 추이
-plot_total_reward(reward_history)
+    # [그림 9-2] 에피소드별 보상 합계 추이
+    plot_total_reward(reward_history)

@@ -1,6 +1,6 @@
 import numpy as np
 import matplotlib.pyplot as plt
-from bandit import Agent
+from s02_bandit import Agent
 
 
 class NonStatBandit:
@@ -33,43 +33,44 @@ class AlphaAgent:
         return np.argmax(self.Qs)
 
 
-runs = 200
-steps = 1000
-epsilon = 0.1
-alpha = 0.8
-agent_types = ['sample average', 'alpha const update']
-results = {}
+if __name__ == '__main__':
+    runs = 200
+    steps = 1000
+    epsilon = 0.1
+    alpha = 0.8
+    agent_types = ['sample average', 'alpha const update']
+    results = {}
 
-for agent_type in agent_types:
-    all_rates = np.zeros((runs, steps))  # (200, 1000)
+    for agent_type in agent_types:
+        all_rates = np.zeros((runs, steps))  # (200, 1000)
 
-    for run in range(runs):
-        if agent_type == 'sample average':
-            agent = Agent(epsilon)
-        else:
-            agent = AlphaAgent(epsilon, alpha)
+        for run in range(runs):
+            if agent_type == 'sample average':
+                agent = Agent(epsilon)
+            else:
+                agent = AlphaAgent(epsilon, alpha)
 
-        bandit = NonStatBandit()
-        total_reward = 0
-        rates = []
+            bandit = NonStatBandit()
+            total_reward = 0
+            rates = []
 
-        for step in range(steps):
-            action = agent.get_action()
-            reward = bandit.play(action)
-            agent.update(action, reward)
-            total_reward += reward
-            rates.append(total_reward / (step + 1))
+            for step in range(steps):
+                action = agent.get_action()
+                reward = bandit.play(action)
+                agent.update(action, reward)
+                total_reward += reward
+                rates.append(total_reward / (step + 1))
 
-        all_rates[run] = rates
+            all_rates[run] = rates
 
-    avg_rates = np.average(all_rates, axis=0)
-    results[agent_type] = avg_rates
+        avg_rates = np.average(all_rates, axis=0)
+        results[agent_type] = avg_rates
 
-# [그림 1-20] 표본 평균과 고정값 α에 의한 갱신 비교
-plt.figure()
-plt.ylabel('Average Rates')
-plt.xlabel('Steps')
-for key, avg_rates in results.items():
-    plt.plot(avg_rates, label=key)
-plt.legend()
-plt.show()
+    # [그림 1-20] 표본 평균과 고정값 α에 의한 갱신 비교
+    plt.figure()
+    plt.ylabel('Average Rates')
+    plt.xlabel('Steps')
+    for key, avg_rates in results.items():
+        plt.plot(avg_rates, label=key)
+    plt.legend()
+    plt.show()

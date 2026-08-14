@@ -26,21 +26,22 @@ class TdAgent:
         self.V[state] += (target - self.V[state]) * self.alpha
 
 
-env = GridWorld()
-agent = TdAgent()
+if __name__ == '__main__':
+    env = GridWorld()
+    agent = TdAgent()
 
-episodes = 1000
-for episode in range(episodes):
-    state = env.reset()
+    episodes = 1000
+    for episode in range(episodes):
+        state = env.reset()
 
-    while True:
-        action = agent.get_action(state)
-        next_state, reward, done = env.step(action)
+        while True:
+            action = agent.get_action(state)
+            next_state, reward, done = env.step(action)
 
-        agent.eval(state, reward, next_state, done)  # 매번 호출
-        if done:
-            break
-        state = next_state
+            agent.eval(state, reward, next_state, done)  # 매번 호출
+            if done:
+                break
+            state = next_state
 
-# [그림 6-5] TD법으로 얻은 가치 함수
-env.render_v(agent.V)
+    # [그림 6-5] TD법으로 얻은 가치 함수
+    env.render_v(agent.V)

@@ -39,21 +39,22 @@ class QLearningAgent:
         self.b[state] = greedy_probs(self.Q, state, self.epsilon)
 
 
-env = GridWorld()
-agent = QLearningAgent()
+if __name__ == '__main__':
+    env = GridWorld()
+    agent = QLearningAgent()
 
-episodes = 10000
-for episode in range(episodes):
-    state = env.reset()
+    episodes = 10000
+    for episode in range(episodes):
+        state = env.reset()
 
-    while True:
-        action = agent.get_action(state)
-        next_state, reward, done = env.step(action)
+        while True:
+            action = agent.get_action(state)
+            next_state, reward, done = env.step(action)
 
-        agent.update(state, action, reward, next_state, done)
-        if done:
-            break
-        state = next_state
+            agent.update(state, action, reward, next_state, done)
+            if done:
+                break
+            state = next_state
 
-# [그림 6-15] Q 러닝으로 얻은 Q 함수와 정책
-env.render_q(agent.Q)
+    # [그림 6-15] Q 러닝으로 얻은 Q 함수와 정책
+    env.render_q(agent.Q)

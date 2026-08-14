@@ -53,24 +53,25 @@ class SarsaOffPolicyAgent:
         self.b[state] = greedy_probs(self.Q, state, self.epsilon)
 
 
-env = GridWorld()
-agent = SarsaOffPolicyAgent()
+if __name__ == '__main__':
+    env = GridWorld()
+    agent = SarsaOffPolicyAgent()
 
-episodes = 10000
-for episode in range(episodes):
-    state = env.reset()
-    agent.reset()
+    episodes = 10000
+    for episode in range(episodes):
+        state = env.reset()
+        agent.reset()
 
-    while True:
-        action = agent.get_action(state)
-        next_state, reward, done = env.step(action)
+        while True:
+            action = agent.get_action(state)
+            next_state, reward, done = env.step(action)
 
-        agent.update(state, action, reward, done)
+            agent.update(state, action, reward, done)
 
-        if done:
-            agent.update(next_state, None, None, None)
-            break
-        state = next_state
+            if done:
+                agent.update(next_state, None, None, None)
+                break
+            state = next_state
 
-# [그림 6-9] 오프-정책 SARSA로 얻은 결과
-env.render_q(agent.Q)
+    # [그림 6-9] 오프-정책 SARSA로 얻은 결과
+    env.render_q(agent.Q)

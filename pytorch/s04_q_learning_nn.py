@@ -1,4 +1,4 @@
-"""ch07/q_learning_nn.py(신경망을 이용한 Q 러닝)의 파이토치 버전."""
+"""ch07/s05_q_learning_nn.py(신경망을 이용한 Q 러닝)의 파이토치 버전."""
 if '__file__' in globals():
     import os, sys
     sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
@@ -74,43 +74,44 @@ class QLearningAgent:
         return loss.item()
 
 
-env = GridWorld()
-agent = QLearningAgent()
+if __name__ == '__main__':
+    env = GridWorld()
+    agent = QLearningAgent()
 
-episodes = 1000  # 에피소드 수
-loss_history = []
+    episodes = 1000  # 에피소드 수
+    loss_history = []
 
-for episode in range(episodes):
-    state = env.reset()
-    state = one_hot(state)
-    total_loss, cnt = 0, 0
-    done = False
+    for episode in range(episodes):
+        state = env.reset()
+        state = one_hot(state)
+        total_loss, cnt = 0, 0
+        done = False
 
-    while not done:
-        action = agent.get_action(state)
-        next_state, reward, done = env.step(action)
-        next_state = one_hot(next_state)
+        while not done:
+            action = agent.get_action(state)
+            next_state, reward, done = env.step(action)
+            next_state = one_hot(next_state)
 
-        loss = agent.update(state, action, reward, next_state, done)
-        total_loss += loss
-        cnt += 1
-        state = next_state
+            loss = agent.update(state, action, reward, next_state, done)
+            total_loss += loss
+            cnt += 1
+            state = next_state
 
-    average_loss = total_loss / cnt
-    loss_history.append(average_loss)
+        average_loss = total_loss / cnt
+        loss_history.append(average_loss)
 
 
-# [그림 7-14] 에피소드별 손실 추이
-plt.xlabel('episode')
-plt.ylabel('loss')
-plt.plot(range(len(loss_history)), loss_history)
-plt.show()
+    # [그림 7-14] 에피소드별 손실 추이
+    plt.xlabel('episode')
+    plt.ylabel('loss')
+    plt.plot(range(len(loss_history)), loss_history)
+    plt.show()
 
-# [그림 7-15] 신경망을 이용한 Q 러닝으로 얻은 Q 함수와 정책
-Q = {}
-for state in env.states():
-    with torch.no_grad():
-        qs = agent.qnet(one_hot(state))
-    for action in env.action_space:
-        Q[state, action] = float(qs[0, action])
-env.render_q(Q)
+    # [그림 7-15] 신경망을 이용한 Q 러닝으로 얻은 Q 함수와 정책
+    Q = {}
+    for state in env.states():
+        with torch.no_grad():
+            qs = agent.qnet(one_hot(state))
+        for action in env.action_space:
+            Q[state, action] = float(qs[0, action])
+    env.render_q(Q)

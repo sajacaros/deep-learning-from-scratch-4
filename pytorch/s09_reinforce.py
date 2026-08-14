@@ -1,4 +1,4 @@
-"""ch09/reinforce.py(REINFORCE)의 파이토치 + Gymnasium 버전.
+"""ch09/s02_reinforce.py(REINFORCE)의 파이토치 + Gymnasium 버전.
 
 simple_pg.py와의 차이는 update() 하나뿐이다.
 simple_pg는 모든 시각의 손실에 '에피소드 전체의 수익 G_0'를 곱하지만,
@@ -64,33 +64,34 @@ class Agent:
         self.memory = []
 
 
-episodes = 3000
-env = gym.make('CartPole-v1')
-agent = Agent(state_size=env.observation_space.shape[0],
-              action_size=env.action_space.n)
-reward_history = []
+if __name__ == '__main__':
+    episodes = 3000
+    env = gym.make('CartPole-v1')
+    agent = Agent(state_size=env.observation_space.shape[0],
+                  action_size=env.action_space.n)
+    reward_history = []
 
-for episode in range(episodes):
-    state, info = env.reset()
-    done = False
-    total_reward = 0
+    for episode in range(episodes):
+        state, info = env.reset()
+        done = False
+        total_reward = 0
 
-    while not done:
-        action, prob = agent.get_action(state)
-        next_state, reward, terminated, truncated, info = env.step(action)
-        done = terminated or truncated
+        while not done:
+            action, prob = agent.get_action(state)
+            next_state, reward, terminated, truncated, info = env.step(action)
+            done = terminated or truncated
 
-        agent.add(reward, prob)
-        state = next_state
-        total_reward += reward
+            agent.add(reward, prob)
+            state = next_state
+            total_reward += reward
 
-    agent.update()
+        agent.update()
 
-    reward_history.append(total_reward)
-    if episode % 100 == 0:
-        print("episode :{}, total reward : {:.1f}".format(episode, total_reward))
+        reward_history.append(total_reward)
+        if episode % 100 == 0:
+            print("episode :{}, total reward : {:.1f}".format(episode, total_reward))
 
-env.close()
+    env.close()
 
-# [그림 9-5] 에피소드별 보상 합계 추이
-plot_total_reward(reward_history)
+    # [그림 9-5] 에피소드별 보상 합계 추이
+    plot_total_reward(reward_history)
