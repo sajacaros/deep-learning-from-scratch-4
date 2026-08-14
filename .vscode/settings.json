@@ -3,13 +3,24 @@
   "python.terminal.activateEnvironment": true,
   "python.envFile": "${workspaceFolder}/.env",
 
-  // ch04/policy_iter.py 처럼 하위 폴더의 파일을 실행해도
+  // ch04/s05_policy_iter.py 처럼 하위 폴더의 파일을 실행해도
   // `from common.gridworld import GridWorld` 가 해결되도록 한다.
   "python.analysis.extraPaths": ["${workspaceFolder}"],
   "python.analysis.typeCheckingMode": "off",
   "terminal.integrated.env.linux": {
     "PYTHONPATH": "${workspaceFolder}"
   },
+
+  // Windows에서 이 폴더를 열었을 때 터미널이 PowerShell 대신 WSL로 뜨게 한다.
+  // 자동 감지되는 프로필 이름에 의존하지 않도록 직접 정의한다.
+  // (WSL 원격 모드로 열었다면 이 설정은 쓰이지 않는다 - 그때는 처음부터 bash다)
+  "terminal.integrated.profiles.windows": {
+    "Ubuntu (WSL)": {
+      "path": "wsl.exe",
+      "args": ["-d", "Ubuntu"]
+    }
+  },
+  "terminal.integrated.defaultProfile.windows": "Ubuntu (WSL)",
 
   "jupyter.notebookFileRoot": "${workspaceFolder}",
 
