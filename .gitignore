@@ -1,6 +1,9 @@
 .DS_Store
 *~
 
+# Windows MOTW 잔재 (WSL에서 NTFS 대체 데이터 스트림이 실제 파일로 생성됨)
+*:Zone.Identifier
+
 build/
 dist/
 dezero.egg-info/
