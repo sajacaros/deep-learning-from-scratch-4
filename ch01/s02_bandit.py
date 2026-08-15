@@ -2,6 +2,26 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 
+def place_window(x=60, y=60):
+    """그래프 창을 현재 화면 왼쪽 위로 옮기고 맨 앞으로 올린다.
+
+    확장 모니터를 쓰다가 노트북 화면만 남으면, 창 관리자가 예전 좌표를 그대로
+    써서 이제는 존재하지 않는 모니터 자리에 창을 띄우는 일이 있다. 그러면
+    plt.show()는 정상인데 화면에는 아무것도 안 보인다. 그래서 창을 띄우기 전에
+    위치를 직접 잡아준다.
+    """
+    try:
+        window = plt.get_current_fig_manager().window
+        if hasattr(window, 'wm_geometry'):  # TkAgg
+            window.wm_geometry('+{}+{}'.format(x, y))
+            window.lift()
+        elif hasattr(window, 'move'):       # QtAgg
+            window.move(x, y)
+            window.raise_()
+    except Exception:
+        pass  # 위치 조정은 부가 기능이므로 실패해도 그림 보는 데 지장은 없다
+
+
 class Bandit:
     def __init__(self, arms=10):  # arms = 슬롯머신 대수
         self.rates = np.random.rand(arms)  # 슬롯머신 각각의 승률 설정(무작위)
@@ -57,10 +77,12 @@ if __name__ == '__main__':
     plt.ylabel('Total reward')
     plt.xlabel('Steps')
     plt.plot(total_rewards)
+    place_window()  # 창이 화면 밖에 뜨지 않도록 위치를 잡아준다
     plt.show()
 
     # [그림 1-13] 단계별 승률
     plt.ylabel('Rates')
     plt.xlabel('Steps')
     plt.plot(rates)
+    place_window()
     plt.show()
