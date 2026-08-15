@@ -147,3 +147,23 @@ dmypy.json
 !.env
 !.vscode/
 !.vscode/*.json
+
+# LaTeX 빌드 부산물 (ch01/paper 등)
+#   .log는 위 "Flask stuff"의 *.log 규칙에 이미 걸린다.
+#   산출물 PDF는 저장소에 포함하므로 여기서 무시하지 않는다.
+*.aux
+*.bbl
+*.blg
+*.fdb_latexmk
+*.fls
+*.idx
+*.ilg
+*.ind
+*.lof
+*.lot
+*.nav
+*.out
+*.snm
+*.synctex.gz
+*.toc
+*.xdv
