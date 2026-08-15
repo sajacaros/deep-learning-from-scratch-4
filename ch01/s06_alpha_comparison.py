@@ -84,10 +84,9 @@ if __name__ == '__main__':
     #    환경·같은 잣대(승률)를 쓴다.
     #
     #    주의: 승률은 α를 고르는 잣대로는 무디다. ε=0.1 이므로 성능 상한
-    #    (이 조건에서 낼 수 있는 최고 승률)이 0.9*(최고 승률) + 0.1*(평균 승률)
-    #    로 낮게 걸려 있고, α가 0.1만 넘으면 이미 상한에 붙어 그 위로는 차이가
-    #    노이즈에 묻힌다. 행동은 argmax(Qs)로 고르므로 Q의 순위만 맞으면
-    #    Q가 부정확해도 받는 보상은 같기 때문이다.
+    #    (이 조건에서 낼 수 있는 최고 승률)이 낮게 걸려 있고, α가 0.1만 넘으면
+    #    이미 상한에 붙어 그 위로는 차이가 노이즈에 묻힌다. 그 상한을 눈으로
+    #    확인하는 것이 아래 2-1)이다.
     #    대신 '표본 평균 vs 고정값 α'의 역전은 아주 선명하게 나온다.
     # -------------------------------------------------------------------------
     def steady_rate(agent_kind, sigma, runs=200, steps=1000):
@@ -165,9 +164,53 @@ if __name__ == '__main__':
     print('1)에서 α=0.8이 이긴 것은 그 환경이 sigma={}로 빠르게 변하기 때문이지,'
           .format(env_sigma))
     print('α가 클수록 좋아서가 아니다.')
-    print('\n고정값 α들끼리의 우열은 승률로는 잘 안 보인다(위 표의 오른쪽 세 열이')
-    print('거의 붙어 있다). α 자체를 고르려면 승률이 아니라 |Q - q| 같은')
-    print('추정 오차를 재야 한다(q는 참값, Q는 추정치).')
+    # -------------------------------------------------------------------------
+    # 2-1) 위 표에서 오른쪽 세 열이 거의 붙어 있는 이유를 확인한다.
+    #      참값 q를 그대로 아는 에이전트를 같은 잣대로 재보면 '성능 상한'이 나온다.
+    #      추정치 Q가 아무리 정확해도 이 위로는 못 올라간다.
+    # -------------------------------------------------------------------------
+    def ceiling_rate(sigma, runs=200, steps=1000):
+        """참값 q를 아는 에이전트의 정상 구간 평균 보상(= 성능 상한).
+
+        steady_rate와 조건이 모두 같고, 행동을 고르는 방법만 다르다.
+        추정치 Q 대신 참값 q(= bandit.rates)를 보고 argmax를 취한다.
+        ε=0.1의 무작위 탐색은 그대로 두어야 같은 잣대가 되므로 남겨둔다.
+        """
+        burn_in = steps // 2
+        total = 0.0
+
+        for _ in range(runs):
+            bandit = NonStatBandit(sigma=sigma)
+            reward_sum = 0
+
+            for step in range(steps):
+                if np.random.rand() < epsilon:
+                    action = np.random.randint(0, bandit.arms)
+                else:
+                    action = int(np.argmax(bandit.rates))  # 참값 q를 그대로 봄
+                reward = bandit.play(action)
+                if step >= burn_in:
+                    reward_sum += reward
+
+            total += reward_sum / (steps - burn_in)
+
+        return total / runs
+
+    print('\nsigma별 성능 상한(참값 q를 아는 경우)과 위 표의 1위 비교')
+    for sigma in sigmas:
+        best = fine_alphas[int(np.argmax(grid[sigma]))]
+        top = max(grid[sigma])
+        cap = ceiling_rate(sigma)
+        print('  sigma {:<6} 상한 {:.4f} | 1위 a={:<5} {:.4f} (상한까지 {:+.4f})'
+              .format(sigma, cap, best, top, top - cap))
+
+    print('\n참값 q를 아는 에이전트조차 ε=0.1로 10번 중 1번은 무작위로 당기므로')
+    print('상한이 이만큼에서 걸린다. α가 0.1만 넘으면 이미 상한에 거의 붙어서,')
+    print('그 위로는 승률로 우열을 가릴 수 없다(위 표의 오른쪽 세 열이 거의')
+    print('붙어 있는 이유다). 행동은 argmax(Qs)로 고르므로 Q의 순위만 맞으면')
+    print('Q가 부정확해도 받는 보상은 같기 때문이다.')
+    print('α 자체를 고르려면 승률이 아니라 |Q - q| 같은 추정 오차를 재야 한다')
+    print('(q는 참값, Q는 추정치).')
 
     # -------------------------------------------------------------------------
     # 3) 그래프
