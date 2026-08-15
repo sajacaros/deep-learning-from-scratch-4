@@ -6,10 +6,10 @@ from s02_bandit import Agent
 class NonStatBandit:
     def __init__(self, arms=10, sigma=0.1):
         self.arms = arms
-        # 진짜 승률이 한 걸음마다 흔들리는 정도. 환경의 성질이지 에이전트가
-        # 고르는 값이 아니다. 0이면 승률이 변하지 않는 정상 문제가 된다.
+        # 참값 q(= 진짜 승률)가 한 걸음마다 흔들리는 정도. 환경의 성질이지
+        # 에이전트가 고르는 값이 아니다. 0이면 q가 변하지 않는 정상 문제가 된다.
         self.sigma = sigma
-        self.rates = np.random.rand(arms)
+        self.rates = np.random.rand(arms)  # 각 슬롯머신의 참값 q
 
     def play(self, arm):
         rate = self.rates[arm]
@@ -23,7 +23,7 @@ class NonStatBandit:
 class AlphaAgent:
     def __init__(self, epsilon, alpha, actions=10):
         self.epsilon = epsilon
-        self.Qs = np.zeros(actions)
+        self.Qs = np.zeros(actions)  # 참값 q에 대한 추정치 Q
         self.alpha = alpha  # 고정값 α
 
     def update(self, action, reward):

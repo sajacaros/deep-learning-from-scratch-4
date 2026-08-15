@@ -112,7 +112,7 @@
 ```python
 class Bandit:
     def __init__(self, arms=10):  # arms = 슬롯머신 대수
-        self.rates = np.random.rand(arms)  # 슬롯머신 각각의 승률 설정(무작위)
+        self.rates = np.random.rand(arms)  # 슬롯머신 각각의 승률 설정(무작위) = 참값 q
 
     def play(self, arm):
         rate = self.rates[arm]
@@ -130,7 +130,7 @@ class Bandit:
 class Agent:
     def __init__(self, epsilon, action_size=10):
         self.epsilon = epsilon  # 무작위로 행동할 확률(탐색 확률)
-        self.Qs = np.zeros(action_size)
+        self.Qs = np.zeros(action_size)  # 참값 q에 대한 추정치 Q
         self.ns = np.zeros(action_size)
 
     # 슬롯머신의 가치 추정
@@ -215,7 +215,7 @@ class NonStatBandit:
     def __init__(self, arms=10, sigma=0.1):
         self.arms = arms
         self.sigma = sigma
-        self.rates = np.random.rand(arms)
+        self.rates = np.random.rand(arms)  # 각 슬롯머신의 참값 q
 
     def play(self, arm):
         rate = self.rates[arm]
@@ -230,7 +230,7 @@ class NonStatBandit:
 class AlphaAgent:
     def __init__(self, epsilon, alpha, actions=10):
         self.epsilon = epsilon
-        self.Qs = np.zeros(actions)
+        self.Qs = np.zeros(actions)  # 참값 q에 대한 추정치 Q
         self.alpha = alpha  # 고정값 α
 
     def update(self, action, reward):
@@ -262,8 +262,8 @@ class AlphaAgent:
   - **오른쪽 아래** — 성적이 아니라 **추정 실력**을 보는 그림. 참값 `q`(검은 선)를 `α`별 추정치 `Q`가 얼마나 잘 쫓아가나
     - 앞의 세 패널과 달리 **슬롯머신 한 대만 떼어낸 별도 데모**
     - 선택(`argmax`·`ε`)을 빼고 매 걸음 그 한 대를 당기며, 세 `α`가 **똑같은 보상 열**을 받음 → 차이는 오직 `α` 때문
-    - `σ=0.02`로 낮추고 진짜 승률을 `[0.05, 0.95]`로 잘라둠 — 안 그러면 검은 선이 1을 넘어 화면을 벗어남
-    - **볼 곳**: 검은 선과 각 색 선의 **간격과 떨림**. 특히 참값이 0.05까지 떨어지는 250~350걸음 구간
+    - `σ=0.02`로 낮추고 참값 `q`를 `[0.05, 0.95]`로 잘라둠 — 안 그러면 검은 선이 1을 넘어 화면을 벗어남
+    - **볼 곳**: 검은 선과 각 색 선의 **간격과 떨림**. 특히 `q`가 0.05까지 떨어지는 250~350걸음 구간
     - `α=0.01`(파랑)은 검은 선이 꺾여도 한참 뒤에 따라감 → 느리지만 매끄러움
     - `α=0.8`(초록)은 0과 1 사이를 마구 오감 → 빠르지만 한 번의 보상에 통째로 휘둘림
     - `α=0.1`(주황)이 그 중간

@@ -24,7 +24,7 @@ def place_window(x=60, y=60):
 
 class Bandit:
     def __init__(self, arms=10):  # arms = 슬롯머신 대수
-        self.rates = np.random.rand(arms)  # 슬롯머신 각각의 승률 설정(무작위)
+        self.rates = np.random.rand(arms)  # 슬롯머신 각각의 승률 설정(무작위) = 참값 q
 
     def play(self, arm):
         rate = self.rates[arm]
@@ -37,7 +37,7 @@ class Bandit:
 class Agent:
     def __init__(self, epsilon, action_size=10):
         self.epsilon = epsilon  # 무작위로 행동할 확률(탐색 확률)
-        self.Qs = np.zeros(action_size)
+        self.Qs = np.zeros(action_size)  # 참값 q에 대한 추정치 Q
         self.ns = np.zeros(action_size)
 
     # 슬롯머신의 가치 추정
