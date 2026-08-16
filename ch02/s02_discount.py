@@ -1,6 +1,7 @@
 if '__file__' in globals():
     import os, sys
     sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
+import os
 import matplotlib.pyplot as plt
 from common.two_square_grid import TwoSquareGrid
 
@@ -94,4 +95,12 @@ if __name__ == '__main__':
     plt.grid(True)
 
     plt.tight_layout()
+
+    # README에 싣는 그림이므로 화면에 띄우기 전에 파일로도 남긴다.
+    image_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'images')
+    os.makedirs(image_dir, exist_ok=True)
+    save_path = os.path.join(image_dir, 's02_discount.png')
+    plt.savefig(save_path, dpi=110, bbox_inches='tight')
+    print('\n그래프 저장:', save_path)
+
     plt.show()
