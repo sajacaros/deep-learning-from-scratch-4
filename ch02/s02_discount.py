@@ -17,10 +17,12 @@ if __name__ == '__main__':
     # =============================================================================
     env = TwoSquareGrid()
 
-    # 비교할 두 정책
+    # 비교할 두 정책 (이름과 번호는 책 그림 2-16을 따른다)
+    MU1 = 'mu1 (L1:Right, L2:Right)'  # 사과를 한 번 먹고 벽에 계속 부딪힌다
+    MU2 = 'mu2 (L1:Right, L2:Left)'   # 사과를 계속 먹으러 오간다
     policies = {
-        'mu1 (L1:Right, L2:Left)': {'L1': 1, 'L2': 0},   # 사과를 계속 먹으러 오간다
-        'mu2 (L1:Right, L2:Right)': {'L1': 1, 'L2': 1},  # 사과를 한 번 먹고 벽에 계속 부딪힌다
+        MU1: {'L1': 1, 'L2': 1},
+        MU2: {'L1': 1, 'L2': 0},
     }
 
 
@@ -58,7 +60,7 @@ if __name__ == '__main__':
         print('{:>7.2f}{:>25.4f}{:>25.4f}'.format(gamma, *values))
 
     print('\ngamma=0 이면 바로 다음 보상만 보므로 두 정책이 똑같아 보인다.')
-    print('gamma가 커질수록 "L2에서 계속 벽에 부딪히는" mu2의 손해가 드러난다.')
+    print('gamma가 커질수록 "L2에서 계속 벽에 부딪히는" mu1의 손해가 드러난다.')
 
 
     # -----------------------------------------------------------------------------
@@ -81,7 +83,7 @@ if __name__ == '__main__':
     # -----------------------------------------------------------------------------
     plt.subplot(1, 2, 2)
     for gamma in [0.5, 0.9, 0.99]:
-        rewards = rewards_of(env, policies['mu1 (L1:Right, L2:Left)'], 200)
+        rewards = rewards_of(env, policies[MU2], 200)
         partial = []
         G = 0.0
         for k, reward in enumerate(rewards):
@@ -90,7 +92,7 @@ if __name__ == '__main__':
         plt.plot(partial, label='gamma={}'.format(gamma))
     plt.xlabel('steps included')
     plt.ylabel('partial sum of G_0')
-    plt.title('Return converges (policy mu1)')
+    plt.title('Return converges (policy mu2)')
     plt.legend()
     plt.grid(True)
 

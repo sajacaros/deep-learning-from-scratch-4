@@ -919,10 +919,10 @@ MDP는 상태 집합, 행동 집합, 상태 전이 확률, 보상 함수, 정책
 표~\ref{tab:gamma-flip}은 본고를 위해 별도로 계산한 값이다. 나머지 수치는 표~\ref{tab:code}의 예제를
 그대로 실행해 얻은 출력이다.
 
-한 가지 표기상의 주의가 필요하다. \texttt{s02\_discount.py}는 비교 대상 두 정책을 각각
-\texttt{mu1 (L1:Right, L2:Left)}, \texttt{mu2 (L1:Right, L2:Right)}라는 이름으로 출력하는데, 이는
-원서 그림 2-16의 번호와 순서가 반대다. 본고는 혼동을 피하기 위해 그림 2-16의 번호를 따르고 행동 쌍을
-함께 병기하였다. 즉 본고의 $\mu_2$가 스크립트의 \texttt{mu1}이다.
+정책의 번호는 본고와 예제 코드 모두 원서 그림 2-16을 따른다. 즉 $\mu_1=(\texttt{Right},\texttt{Right})$,
+$\mu_2=(\texttt{Right},\texttt{Left})$이며, \texttt{s02\_discount.py}의 출력에서도 같은 순서로 나열된다.
+다만 표~\ref{tab:gamma-sweep}은 최적 정책을 먼저 보이기 위해 $\mu_2$를 왼쪽 열에 두었으므로, 콘솔
+출력과 열 순서가 반대라는 점만 유의하면 된다.
 
 \begin{thebibliography}{9}
 \bibitem{dlfs4}
