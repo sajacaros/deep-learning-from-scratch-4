@@ -61,4 +61,12 @@ if __name__ == '__main__':
     print('gamma가 작을수록 빨리 수렴한다. 대신 먼 미래를 보지 못한다.')
 
     plt.tight_layout()
+
+    # README에 싣는 그림이므로 화면에 띄우기 전에 파일로도 남긴다.
+    image_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'images')
+    os.makedirs(image_dir, exist_ok=True)
+    save_path = os.path.join(image_dir, 's02_bellman_iterative.png')
+    plt.savefig(save_path, dpi=110, bbox_inches='tight')
+    print('\n그래프 저장:', save_path)
+
     plt.show()
