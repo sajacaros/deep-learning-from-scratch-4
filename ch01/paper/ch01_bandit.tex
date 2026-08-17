@@ -15,6 +15,8 @@
 \usepackage{xcolor}
 \usepackage{algorithm}
 \usepackage{algpseudocode}
+\usepackage{tikz}
+\usetikzlibrary{positioning,arrows.meta,calc}
 \usepackage[margin=27mm,top=28mm,bottom=28mm]{geometry}
 \usepackage[labelsep=period,font=small,labelfont=bf]{caption}
 \usepackage{enumitem}
@@ -77,9 +79,35 @@
 \newcommand{\bookfig}[1]{\textit{출처: 원서 그림 #1.}}
 \newcommand{\cmt}[1]{\textcolor{codecm}{#1}}   % 리스팅 안의 한글 주석
 
+% ---- 정책 흐름도 -----------------------------------------------------------
+% 탐욕 정책과 eps-탐욕 정책은 「고르는 칸」 하나만 다르므로, 고리 전체를 매크로로
+% 두고 그 칸에 붙는 설명만 인자로 받는다(두 그림의 배치가 어긋나지 않게 하려는 것).
+\tikzset{
+  loopbox/.style   = {draw, rounded corners=2pt, align=center,
+                      minimum width=36mm, minimum height=8mm, font=\small},
+  loopghost/.style = {loopbox, draw=black!35, dashed, text=black!55},
+  looparr/.style   = {-{Latex[length=2mm]}, thick},
+  looplbl/.style   = {font=\scriptsize, inner sep=3pt},
+}
+\newcommand{\policyloop}[1]{%
+\begin{tikzpicture}[node distance=12mm]
+  \node[loopbox]               (q)   {추정 $\Qe(a)$,\ \ $a = 1,\dots,10$};
+  \node[loopbox,   below=of q] (sel) {기계 선택 $A_t$};
+  \node[loopbox, below=of sel] (r)   {보상 $R_t \in \{0,1\}$};
+  \node[loopghost, below=of r] (win) {관측 승률 $=$ 누적 보상 $/$ 걸음 수};
+  \draw[looparr] (q)   -- node[looplbl, right] {#1} (sel);
+  \draw[looparr] (sel) -- node[looplbl, right]
+        {참값 $\qt(A_t)$의 확률로 당첨 \ (\,$\qt$는 환경만 안다\,)} (r);
+  \draw[looparr] (r)   -- node[looplbl, right] {기록만 한다} (win);
+  \draw[looparr] (r.west) -- ++(-14mm,0) |- (q.west);
+  \node[looplbl, left, align=right]
+        at ($(q.west)!0.5!(r.west) + (-14mm,0)$)
+        {update\\[2pt] 고른 기계의 $\Qe(A_t)$만 갱신};
+\end{tikzpicture}}
+
 \title{\bfseries 밴디트 문제와 행동 가치 추정\\[2mm]
 \large 탐색과 활용의 절충, 그리고 비정상 환경에서의 갱신 규칙}
-\author{sajacaros\\\small \texttt{research@dacon.kr}}
+\author{sajacaros\\\small \texttt{sajacall82@naver.com}}
 \date{2026년 8월 16일}
 
 \begin{document}
@@ -164,7 +192,7 @@ $\alpha$로 대체하는 것이 왜 지수 이동 평균에 해당하며 어떤 
         $\alpha=0.8$ 하나만을 표본 평균과 견준다. 본고는 $\sigma$를 $0$부터 $0.1$까지 바꾸어, 고정값
         $\alpha$의 우위가 $\sigma>0$이라는 조건에 달려 있음을 보인다.
   \item \textbf{성능 상한의 측정}(\S\ref{sec:ceiling}). 참값 $\qt$를 그대로 아는 에이전트를 같은 잣대로
-        측정하여, 승률이라는 잣대 자체가 어디서 천장에 막히는지를 수치로 제시한다.
+        측정하여, 승률이라는 잣대 자체가 어디서 한계에 닿는지를 수치로 제시한다.
 \end{enumerate}
 
 % =============================================================================
@@ -357,6 +385,21 @@ $\Qe_{n-1}$을 $R_n$ 쪽으로 그 거리의 $1/n$만큼 옮기는 연산이다.
 \emph{활용}(exploitation)이라 부른다. 그러나 추정치는 부정확할 수 있고, 특히 초반에 우연히 좋아 보인
 슬롯머신에 갇히면 그 오해를 스스로 교정할 기회가 사라진다.
 
+탐욕 정책만 쓸 때 한 걸음이 어떻게 도는지를 그림~\ref{fig:greedy-loop}에 정리하였다.
+
+\begin{figure}[htbp]
+\centering
+\policyloop{$\arg\max_a \Qe(a)$ — 지금 가장 커 보이는 기계}
+\caption{탐욕 정책의 한 걸음. 점선 상자는 기록용 지표이며, 에이전트는 이 값을 참조하지 않는다.}
+\label{fig:greedy-loop}
+\end{figure}
+
+그림에서 짚어둘 것이 셋이다. 첫째, 추정치 $\Qe$는 슬롯머신마다 하나씩 있다. 슬롯머신이 10대면
+$\Qe$도 10개이며, 서로 견주어 골라야 하므로 후보마다 점수가 하나씩 필요하다. 둘째, 참값 $\qt$는
+고리 안에 직접 등장하지 않는다. 에이전트는 $\qt$를 볼 수 없고, $\qt$가 정한 확률로 나온 보상 $R$만
+받는다. 셋째, 관측 승률은 고리를 여러 번 돈 결과를 기록한 값일 뿐 $\Qe$가 아니다. 이 값은 실험자가
+성능을 재려고 남기는 것이지 에이전트가 참조하는 값이 아니다.
+
 반대편에 \emph{탐색}(exploration)이 있다. 추정치와 무관하게 다른 슬롯머신도 시도해 정보를 모으는
 것으로, 당장의 보상은 손해지만 추정치의 정확도가 올라간다. 활용과 탐색은 한쪽을 늘리면 다른 쪽이
 줄어드는 \emph{상충 관계}(trade-off)에 있다.
@@ -364,6 +407,21 @@ $\Qe_{n-1}$을 $R_n$ 쪽으로 그 거리의 $1/n$만큼 옮기는 연산이다.
 가장 단순한 절충안이 \emph{$\eps$-탐욕 정책}($\eps$-greedy policy)이다. 확률 $\eps$로 무작위 행동을
 취하고(탐색), 확률 $1-\eps$로 추정치가 최대인 행동을 취한다(활용). 예컨대 $\eps=0.1$이면 10번 중
 1번은 무작위로 플레이한다.
+
+그림~\ref{fig:greedy-loop}에서 바뀌는 것은 고르는 칸 하나뿐이다(그림~\ref{fig:eps-greedy-loop}).
+
+\begin{figure}[htbp]
+\centering
+\policyloop{\shortstack[l]{%
+  확률 $1-\eps$ : $\arg\max_a \Qe(a)$ \ (활용)\\[2pt]
+  확률 $\eps$ \ \ \ : 무작위 — $\Qe$를 보지 않는다 \ (탐색)}}
+\caption{$\eps$-탐욕 정책의 한 걸음. 그림~\ref{fig:greedy-loop}과 견주면 행동을 고르는 칸만 다르다.}
+\label{fig:eps-greedy-loop}
+\end{figure}
+
+$\Qe$를 보고 고르는 것은 확률 $1-\eps$일 때뿐이고, 확률 $\eps$일 때는 $\Qe$를 아예 무시한다. 나머지,
+곧 플레이에서 보상을 거쳐 갱신에 이르는 부분은 탐욕 정책과 같다. 무작위로 고른 걸음도 보상을 받고
+갱신을 거치므로, 탐색은 결국 그 기계의 $\Qe$를 고치는 데 쓰인다.
 
 \begin{algorithm}[htbp]
 \caption{$\eps$-탐욕 정책에 의한 밴디트 학습}
@@ -767,8 +825,8 @@ $\sigma=0$인 첫 행에서만 표본 평균($0.8612$)이 모든 고정값 $\alp
 때문이며, 이것이 $\eps$-탐욕 정책이 스스로 부담하는 비용이다.
 
 둘째, $\sigma>0$인 세 행에서 최적 $\alpha$는 상한과 $0.0039$, $0.0005$, $0.0009$밖에 차이 나지 않는다.
-즉 상위 $\alpha$들은 \emph{이미 천장에 닿아 있다}. 표~\ref{tab:alpha-grid}의 오른쪽 세 열이 붙어 있는
-것은 $\alpha$들이 대등해서가 아니라 잣대가 막혀서다. 행동을 $\arg\max_a \Qe(a)$로 고르는 이상
+즉 상위 $\alpha$들은 \emph{이미 상한에 닿아 있다}. 표~\ref{tab:alpha-grid}의 오른쪽 세 열이 붙어 있는
+것은 $\alpha$들이 대등해서가 아니라 \emph{승률이라는 잣대가 이미 한계에 닿았기 때문}이다. 행동을 $\arg\max_a \Qe(a)$로 고르는 이상
 $\Qe$의 \emph{순위}만 맞으면 $\Qe$가 부정확해도 받는 보상은 같으므로, 승률은 추정의 정확도에 둔감할
 수밖에 없다.
 
