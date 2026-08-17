@@ -11,6 +11,24 @@
 
 ---
 
+## 강화학습 100제
+
+스터디에서 한 장을 끝낼 때 훑어볼 확인 문항 100개를 만들어 두었습니다.
+장별로 O/X · 빈칸 · 단답 · 설명 문항이 섞여 있고, 정답은 접혀 있어 먼저 답해본 뒤 펼쳐볼 수 있습니다.
+
+**[강화학습 100제 바로 가기](https://sajacaros.github.io/deep-learning-from-scratch-4/)**
+
+문항은 `docs/questions.json` 한 파일에 모여 있습니다. 고친 뒤에는 형식이 깨지지 않았는지 확인해주세요.
+
+```bash
+$ uv run python scripts/check_questions.py   # 문항 수와 형식 검사
+$ python -m http.server 8000 --directory docs  # http://localhost:8000 에서 미리보기
+```
+
+`docs/index.html`을 `file://`로 바로 열면 브라우저가 `questions.json` 읽기를 막으므로 위처럼 서버로 띄워야 합니다.
+
+---
+
 ## 파일 구성
 
 |폴더 이름 |설명                         |
@@ -23,6 +41,8 @@
 |common     |공통으로 사용하는 소스 코드   |
 |notebooks  |주피터 노트북 형태의 소스 코드 |
 |pytorch    |파이토치용으로 포팅된 소스 코드  |
+|docs       |강화학습 100제 사이트(GitHub Pages) ※원서에 없는 추가분 |
+|scripts    |보조 스크립트 |
 
 ### 1장 보충 예제 (원서에 없는 추가분)
 

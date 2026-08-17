@@ -142,6 +142,9 @@ dmypy.json
 # 스터디 응원봇 문구 (위 *.json 규칙의 예외)
 !scripts/messages.json
 
+# 강화학습 100제 문항 데이터 (위 *.json 규칙의 예외)
+!docs/questions.json
+
 # 개발 환경 설정 파일 (위 규칙들의 예외 - 팀에서 공유해야 함)
 !.python-version
 !.env
