@@ -89,7 +89,7 @@
 \title{\bfseries 벨만 방정식과 최적성\\[2mm]
 \large 무한한 미래를 유한한 연립방정식으로 바꾸는 재귀 구조, 그리고 $\max$가 들어올 때 달라지는 것}
 \author{sajacaros\\\small \texttt{sajacall82@naver.com}}
-\date{2026년 8월 23일}
+\date{2026년 8월 25일}
 
 \begin{document}
 \maketitle
@@ -114,6 +114,7 @@ $\gamma=0.9$, $\varepsilon=10^{-10}$에서 약 $51$개 상태임을 보인다.
 가르는 간극을 수치로 제시한다.
 넷째, 벨만 최적 방정식의 손풀이에서 네 가지 결정적 정책 가정 중 하나만이 자기일관임을 전수 확인하고,
 $\max$ 연산자의 비확장성으로부터 최적 벨만 연산자 역시 $\gamma$-축소 사상임을 증명한다.
+본고의 절 구성은 원서 3장의 목차를 그대로 따르되, 각 절 끝에 ``[보충]''으로 표시한 분석을 덧붙였다.
 
 \vspace{2mm}
 \noindent\textbf{주제어:} 강화 학습, 벨만 방정식, 벨만 최적 방정식, 행동 가치 함수, 축소 사상,
@@ -139,13 +140,13 @@ $\max$ 연산자의 비확장성으로부터 최적 벨만 연산자 역시 $\ga
 로 정의하였다. 그리고 두 칸짜리 그리드 월드에서 최적 정책을 찾을 때는 결정적 정책 네 가지를 모두
 나열하여 각각의 가치를 500걸음 시뮬레이션으로 재는 전수 탐색을 썼다.
 
-이 방법은 두 군데에서 막힌다. 하나는 \emph{세로}로 막힌다. 식~\eqref{eq:value-def}의 $G_t$는 무한급수이므로
-정의대로는 끝까지 더할 수 없고, 500걸음에서 자르는 것은 어디까지나 근사다. 다른 하나는 \emph{가로}로
-막힌다. 결정적 정책의 수는 $|\Aset|^{|\Sset|}$이므로 상태가 100개이고 행동이 4가지면
-$4^{100}\approx1.6\times10^{60}$가지를 세어야 한다. 두 칸 세계에서 네 가지를 세어 본 것은 문제가 작았기
-때문이지 방법이 좋았기 때문이 아니다.
+이 방법은 두 군데에서 막힌다. 하나는 \emph{정책 하나의 가치를 재는 일}이 끝나지 않는다는 것이다.
+식~\eqref{eq:value-def}의 $G_t$는 무한급수이므로 정의대로는 끝까지 더할 수 없고, 500걸음에서 자르는 것은
+어디까지나 근사다. 다른 하나는 \emph{재야 할 정책의 수}다. 결정적 정책의 수는 $|\Aset|^{|\Sset|}$이므로
+상태가 100개이고 행동이 4가지면 $4^{100}\approx1.6\times10^{60}$가지를 세어야 한다. 두 칸 세계에서 네
+가지를 세어 본 것은 문제가 작았기 때문이지 방법이 좋았기 때문이 아니다.
 
-그림~\ref{fig:backup-infinite}이 세로 방향의 벽을 그대로 보여준다. 앞 장에서 그린 백업 다이어그램인데,
+그림~\ref{fig:backup-infinite}이 첫 번째 벽을 그대로 보여준다. 앞 장에서 그린 백업 다이어그램인데,
 맨 아래에서 가지가 점선으로 계속 이어진다. 수익을 정의대로 구하려면 이 점선을 끝까지 따라가야 한다.
 
 \begin{figure}[htbp]
@@ -163,12 +164,14 @@ $v_\pi(s')$ 자체다. 그렇다면 무한한 가지를 펼치는 대신 한 층
 
 \subsection{본고의 구성과 기여}
 
-2절에서 백업 다이어그램의 확률 셈법을 정리한 뒤 수익의 재귀 구조로부터 벨만 방정식을 도출한다.
-3절은 이 식을 연립일차방정식으로 보고 두 칸 세계와 $3\times4$ 그리드에서 실제로 푼다.
-4절에서 행동 가치 함수를 도입하여 $V$와 $Q$의 상호 변환을 정리하고, 5절에서 $\sum_a\pi(a\mid s)$를
-$\max_a$로 바꾼 벨만 최적 방정식을 다룬다.
+본고는 원서 3장의 목차를 그대로 따른다. \S\ref{sec:derivation}에서 백업 다이어그램의 확률 셈법을 정리한 뒤
+수익의 재귀 구조로부터 벨만 방정식을 도출하고, \S\ref{sec:linear}에서 그 식을 두 칸 세계와 $3\times4$
+그리드에 적용하여 연립일차방정식으로 푼다. \S\ref{sec:qsec}에서 행동 가치 함수를 도입하여 $V$와 $Q$의
+상호 변환을 정리하고, \S\ref{sec:opt}에서 $\sum_a\pi(a\mid s)$를 $\max_a$로 바꾼 벨만 최적 방정식을 세운
+뒤 \S\ref{sec:opt-example}에서 그것을 다시 두 칸 세계에 적용한다. \S\ref{sec:summary}이 정리다.
 
-원서 3장에는 소스 코드가 없다. 본고가 추가한 것은 예제 네 편과 다음 네 가지 분석이다.
+원서 3장에는 소스 코드가 없다. 본고가 추가한 것은 예제 네 편과 다음 네 가지 분석이며, 각각을 해당 절 끝에
+``[보충]''으로 표시하였다.
 
 \begin{enumerate}[leftmargin=*,itemsep=2pt]
   \item \textbf{반복 대입의 수렴률은 정확히 $\gamma$다}(\S\ref{sec:rate}). 축소 사상 논증이 주는 것은
@@ -182,17 +185,18 @@ $\max_a$로 바꾼 벨만 최적 방정식을 다룬다.
   \item \textbf{한 번의 탐욕화가 주는 것과 주지 못하는 것}(\S\ref{sec:greedy}). 무작위 정책의 $Q$를
         한 번 탐욕화하면 $3\times4$ 그리드의 10개 상태 전부에서 가치가 오르지만(평균 $-0.212\to0.760$),
         아래쪽 세 칸은 최적값에 최대 $0.279$ 못 미친다. 정책 반복법이 왜 ``반복''인지가 이 간극이다.
-  \item \textbf{손풀이의 경우 분석과 최적 연산자의 축소성}(\S\ref{sec:cases}, \S\ref{sec:contraction}).
-        네 가지 결정적 정책 가정 중 자기일관인 것이 하나뿐임을 전수 확인하고, $\max$의 비확장성으로부터
-        최적 벨만 연산자가 $\gamma$-축소 사상임을 증명한다. 예제가 정확히 333회에서 멈추는 이유도
+  \item \textbf{최적 연산자의 축소성과 손풀이의 경우 분석}(\S\ref{sec:contraction}, \S\ref{sec:cases}).
+        $\max$의 비확장성으로부터 최적 벨만 연산자가 $\gamma$-축소 사상임을 증명하고, 네 가지 결정적
+        정책 가정 중 자기일관인 것이 하나뿐임을 전수 확인한다. 예제가 정확히 333회에서 멈추는 이유도
         부동소수점 분해능으로 설명한다.
 \end{enumerate}
 
 % =============================================================================
-\section{벨만 방정식의 도출}
+\section{벨만 방정식 도출}
+\label{sec:derivation}
 % =============================================================================
 
-\subsection{백업 다이어그램으로 기댓값 읽기}
+\subsection{확률과 기댓값(사전 준비)}
 \label{sec:expectation}
 
 벨만 방정식은 결국 기댓값 계산이므로, 먼저 백업 다이어그램에서 기댓값을 읽는 연습을 해 둔다.
@@ -241,8 +245,10 @@ $\max_a$로 바꾼 벨만 최적 방정식을 다룬다.
 층이 늘어도 그대로 통한다. 둘째, 두 번째 층의 확률이 첫 번째 층의 결과에 따라 달라진다. 이 두 성질이
 그대로 벨만 방정식의 유도에 쓰인다. MDP에서는 첫 번째 층이 정책이고 두 번째 층이 상태 전이일 뿐이다.
 
-\subsection{수익의 재귀 구조}
-\label{sec:recursion}
+\subsection{벨만 방정식 도출}
+\label{sec:bellman-derive}
+
+\subsubsection{수익의 재귀 구조}
 
 출발점은 수익의 정의다.
 \begin{equation}
@@ -286,7 +292,7 @@ $\max_a$로 바꾼 벨만 최적 방정식을 다룬다.
 \label{fig:two-terms}
 \end{figure}
 
-\subsection{두 층의 확률: 정책과 상태 전이}
+\subsubsection{두 층의 확률: 정책과 상태 전이}
 
 식~\eqref{eq:v-split}의 두 항을 전개하려면 어떤 확률이 걸려 있는지 알아야 한다. 그림~\ref{fig:two-layers}이
 그것을 보여준다.
@@ -317,7 +323,7 @@ $\max_a$로 바꾼 벨만 최적 방정식을 다룬다.
 이다. 여기가 유도의 핵심이다. $G_{t+1}$은 그 자체로 무한급수인데, 그 무한급수의 기댓값을 다시 펼치지
 않고 $v_\pi(s')$이라는 \emph{이름}으로 대신했다. 그림~\ref{fig:backup-infinite}의 점선이 여기서 잘린다.
 
-\subsection{벨만 방정식}
+\subsubsection{벨만 방정식}
 
 식~\eqref{eq:first-term}과 \eqref{eq:second-term}을 식~\eqref{eq:v-split}에 넣고 공통의 $\sum$으로 묶으면
 \emph{벨만 방정식}을 얻는다.
@@ -352,11 +358,12 @@ $\max_a$로 바꾼 벨만 최적 방정식을 다룬다.
 자기참조 구조가 치른 대가다. 다음 절에서 보듯 그 대가는 연립방정식을 푸는 정도의 값이다.
 
 % =============================================================================
-\section{연립일차방정식으로서의 벨만 방정식}
+\section{벨만 방정식의 예}
 \label{sec:linear}
 % =============================================================================
 
 \subsection{두 칸짜리 그리드 월드}
+\label{sec:two-square}
 
 앞 장에서 쓴 두 칸짜리 그리드 월드를 그대로 가져온다. 이번에 평가할 정책은
 $\Lone$과 $\Ltwo$ 어디에서나 \texttt{Left}와 \texttt{Right}를 $0.5$씩 고르는 무작위 정책이다.
@@ -411,7 +418,7 @@ $\Lone$과 $\Ltwo$ 어디에서나 \texttt{Left}와 \texttt{Right}를 $0.5$씩 �
 풀면 $v_\pi(\Lone)=-2.25$, $v_\pi(\Ltwo)=-2.75$다. 무작위로 걸으면 벽에 부딪히는 일이 잦아 값이 음수가
 된다.
 
-\subsection{행렬 형태와 정확해}
+\subsubsection{행렬 형태와 정확해}
 
 식~\eqref{eq:two-eqs}을 세운 과정은 상태 수가 늘어도 달라지지 않는다. 벨만 방정식은 $v_\pi$에 대한
 \emph{일차식}이므로 언제나 행렬로 묶인다. 정책 $\pi$ 아래의 상태 전이 행렬과 기대 보상 벡터를
@@ -475,6 +482,8 @@ $\mu=(\texttt{Right},\texttt{Left})$            & $5.2632$  & $4.7368$  & 앞 �
 500걸음을 시뮬레이션해야 했다. 여기서는 $2\times2$ 연립방정식을 한 번 풀었다. 근사가 정확해로 바뀌었고
 걸음 수라는 임의의 절단 지점도 사라졌다.
 
+\subsubsection{\texorpdfstring{$3\times4$}{3x4} 그리드 월드로}
+
 같은 코드의 후반부는 $3\times4$ 그리드 월드를 12원 연립방정식으로 푼다. 이 환경은 다음 장에서 반복
 계산으로 다시 풀 문제다.
 
@@ -501,23 +510,78 @@ $h=2$ & $-0.1034$ & $-0.2210$ & $-0.4368$ & $-0.7857$ \\
 
 이 값들은 다음 장의 반복 정책 평가가 구하는 값과 최대 오차 $4.644\times10^{-10}$로 일치한다. 반복 계산에
 쓴 종료 문턱이 $10^{-10}$이었으므로 이는 두 방법이 같은 방정식을 서로 다른 방식으로 푼 것임을 보여준다.
-다음 두 절에서 그 ``다른 방식''이 무엇인지, 그리고 정확해가 있는데도 왜 그쪽을 쓰는지 살펴본다.
 
-\subsection{[보충] 반복 대입의 수렴률은 정확히 \texorpdfstring{$\gamma$}{gamma}다}
-\label{sec:rate}
+\subsection{벨만 방정식의 의의}
+\label{sec:significance}
 
-식~\eqref{eq:matrix-form}은 우변에 $v$가 있으므로 \emph{고정점 방정식}이기도 하다. 벨만 연산자
+벨만 방정식이 없다면 가치를 구하는 길은 두 가지뿐이고 둘 다 막혀 있다.
+
+\begin{table}[htbp]
+\centering
+\caption{벨만 방정식이 없을 때 $v_\pi(s)$에 이르는 두 경로. 어느 쪽도 끝나지 않는다.}
+\label{tab:no-bellman}
+\small
+\begin{tabular}{@{}ll@{}}
+\toprule
+방법 & 막히는 곳 \\
+\midrule
+수익의 정의대로 계산    & 무한히 이어지는 항을 모두 더해야 한다(앞 장은 500걸음에서 잘랐다) \\
+모든 궤적을 나열해 기댓값 & 그림~\ref{fig:two-square} 오른쪽처럼 가지가 $2^n$으로 폭발한다 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+벨만 방정식은 이 문제를 미지수 $|\Sset|$개짜리 \emph{연립일차방정식}으로 바꾼다. 상태가 100개면 100원
+연립방정식이며, 유한하고 컴퓨터가 곧바로 풀 수 있는 크기다. 앞 장의 전수 탐색이 마주한 $4^{100}$과는
+차원이 다르다. 무한급수와 지수적 나열이라는 두 벽이 동시에 사라지는 자리가 여기다.
+
+다만 정확해를 주는 이 길에도 한계가 있다. 식~\eqref{eq:matrix-form}을 직접 푸는 데는
+$|\Sset|\times|\Sset|$ 행렬이 필요하고 연산량이 $O(|\Sset|^3)$이므로, 상태가 아주 많아지면 감당하기
+어려워진다. 그래서 실제로는 우변에 계속 대입해 근사해로 다가가는 \emph{반복 대입}을 쓰며, 그것이 다음 장의
+동적 프로그래밍이다.
+
+반복 대입이 왜 되는지는 식~\eqref{eq:matrix-form}을 다시 보면 알 수 있다. 이 식은 우변에도 $v$가 있으므로
+\emph{고정점 방정식}이기도 하다. 벨만 연산자
 \begin{equation}
   (\Tpi v)(s) = \sum_a \pi(a\mid s)\sum_{s'} p(s'\mid s,a)\bigl\{r(s,a,s')+\gamma v(s')\bigr\},
   \qquad \Tpi v = r_\pi + \gamma P_\pi v
   \label{eq:operator}
 \end{equation}
-를 두면 벨만 방정식은 $v_\pi = \Tpi v_\pi$로 쓰인다. 그러면 아무 값에서 출발해 우변에 계속 대입하는
+를 두면 벨만 방정식은 $v_\pi = \Tpi v_\pi$로 쓰인다.
+
+\paragraph{$(\Tpi v)(s)$라는 표기를 푸는 법.}
+여기서 $v$는 숫자 하나가 아니라 상태마다 값이 하나씩 적힌 \emph{표}, 곧 길이 $|\Sset|$짜리 벡터다.
+$\Tpi$는 그런 표를 하나 받아 같은 크기의 표를 하나 내놓는 기계이며, 이렇게 함수를 넣으면 함수가 나오는
+것을 \emph{연산자}(operator)라 부른다. 따라서 $\Tpi v$ 자체가 새로운 표이고, 뒤에 붙은 $(s)$는 그 새 표에서
+$s$ 칸의 값을 꺼내라는 뜻이다. 괄호가 $\Tpi\bigl(v(s)\bigr)$가 아니라 $(\Tpi v)(s)$인 이유가 여기에 있다.
+
+기계가 하는 일은 식~\eqref{eq:operator}의 우변 그대로다. 지금 손에 든 표 $v$를 \emph{잠정적인} 가치
+추정치로 믿고, 상태 $s$에서 한 걸음만 실제로 굴려 보상 $r(s,a,s')$을 받은 다음, 그 이후는 도착한 칸의 값
+$v(s')$을 그대로 갖다 쓴다. 요컨대 \emph{한 걸음은 진짜로 계산하고 나머지는 지금의 추정치로 때우는} 것이며,
+그 결과를 모든 상태에 대해 적어 놓은 표가 $\Tpi v$다. 참값 $v_\pi$를 넣었다면 때운 부분도 참값이므로 나온
+표 역시 $v_\pi$일 수밖에 없는데, 그것이 곧 $v_\pi = \Tpi v_\pi$다.
+
+\paragraph{고정점 방정식이란.}
+$x=f(x)$처럼 \emph{넣은 것이 그대로 다시 나오는} 꼴의 방정식을 고정점 방정식이라 하고, 그것을 만족하는
+$x$를 $f$의 \emph{고정점}(fixed point)이라 한다. 익숙한 예가 $x=\cos x$다. 계산기에 아무 수나 넣고 $\cos$을
+계속 누르면 $0.739085\ldots$로 빨려 들어가는데, 그 값이 $\cos$의 고정점이다.
+
+벨만 방정식이 정확히 이 꼴이다. 좌변에도 $v_\pi$가 있고 우변에도 $v_\pi$가 있으므로, 이 식을 푼다는 것은
+\emph{$\Tpi$에 넣었을 때 자기 자신이 도로 나오는 표}를 찾는 일이다. 그리고 $\cos$의 예가 그랬듯이 그런 표는
+아무 값에서 출발해 계속 대입하는 것만으로 찾을 수 있다.
 \begin{equation}
   v_{k+1} = \Tpi v_k = r_\pi + \gamma P_\pi v_k
   \label{eq:iteration}
 \end{equation}
-가 참값으로 수렴하리라 기대할 수 있다. 근거는 $\Tpi$가 축소 사상이라는 것이다.
+다만 아무 $f$에서나 되는 것은 아니고 $f$가 \emph{두 점 사이의 거리를 줄이는} 함수여야 하는데($\cos$이
+그렇다), 벨만 연산자가 그 조건을 만족한다는 것이 다음 절의 명제~\ref{prop:contraction}이다. 수렴이
+보장되는 근거와 그 속도는 \S\ref{sec:rate}에서, 직접 해법과의 손익분기는 \S\ref{sec:cost}에서 따지며,
+이 반복을 실제로 돌려 보는 예제가 \texttt{s02\_bellman\_iterative.py}다.
+
+\subsection{[보충] 반복 대입의 수렴률은 정확히 \texorpdfstring{$\gamma$}{gamma}다}
+\label{sec:rate}
+
+식~\eqref{eq:iteration}이 수렴하는 근거는 $\Tpi$가 축소 사상이라는 것이다.
 
 \begin{proposition}[벨만 연산자의 축소성]
 \label{prop:contraction}
@@ -671,10 +735,12 @@ $|\Sset|=10^4$이면 배정밀도로 $0.8$\,GB이고, $|\Sset|=10^6$이면 $8$\,
 가치 함수를 신경망으로 근사하게 되는 출발점이기도 하다.
 
 % =============================================================================
-\section{행동 가치 함수}
+\section{행동 가치 함수(Q 함수)와 벨만 방정식}
+\label{sec:qsec}
 % =============================================================================
 
-\subsection{\texorpdfstring{$Q$}{Q} 함수의 정의}
+\subsection{행동 가치 함수}
+\label{sec:q-def-sec}
 
 지금까지의 $v_\pi(s)$는 ``상태 $s$에서 정책 $\pi$를 따를 때''의 기대 수익이다. 여기서 첫 행동만 정책의
 손에서 빼앗아 자유롭게 지정한 것이 \emph{행동 가치 함수}(action-value function), 흔히 $Q$ 함수다.
@@ -689,7 +755,8 @@ $|\Sset|=10^4$이면 배정밀도로 $0.8$\,GB이고, $|\Sset|=10^6$이면 $8$\,
 \includegraphics[width=0.78\linewidth]{{fig 3-11}.png}
 \caption{$v_\pi$(왼쪽)와 $q_\pi$(오른쪽)의 차이. 주황색으로 감싼 범위가 왼쪽은 상태 $s$만이고 오른쪽은
 $s$와 행동 $a$까지다. 왼쪽에서는 첫 행동도 정책이 고르므로 갈래가 여럿이지만, 오른쪽에서는 첫 행동이
-지정되어 갈래가 하나로 고정되고 그 아래부터 $\pi$를 따른다. \bookfig{3-11}}
+지정되어 갈래가 하나로 고정되고 그 아래부터 $\pi$를 따른다. 이 ``첫 행동만 자유''라는 차이가 4장 정책
+개선과 6장 Q 러닝의 근거가 된다. \bookfig{3-11}}
 \label{fig:v-vs-q}
 \end{figure}
 
@@ -735,7 +802,8 @@ $Q$는 $|\Aset|$배의 기억 용량을 쓰는 대신, 행동을 고를 때 환�
 해 준다. 환경 모델을 모르는 채로 경험만 가지고 배우는 5장 이후의 기법들이 예외 없이 $Q$를 추정하는
 것은 이 한 줄 때문이다.
 
-\subsection{\texorpdfstring{$Q$}{Q}에 대한 벨만 방정식}
+\subsection{행동 가치 함수를 이용한 벨만 방정식}
+\label{sec:q-bellman-sec}
 
 식~\eqref{eq:q-from-v}의 우변에는 아직 $v_\pi$가 남아 있다. 여기에 식~\eqref{eq:v-from-q}을 대입하면
 $Q$만으로 닫힌 식이 된다.
@@ -851,11 +919,14 @@ $\pi'$는 아래쪽 줄에서 모두 왼쪽으로 돌아간다. 무작위 정책
 
 % =============================================================================
 \section{벨만 최적 방정식}
+\label{sec:opt}
 % =============================================================================
 
-\subsection{\texorpdfstring{$\sum_a\pi(a\mid s)$}{sum\_a pi(a|s)}에서 \texorpdfstring{$\max_a$}{max\_a}로}
-
 지금까지는 \emph{주어진} 정책 $\pi$를 평가했다. 이제 최적 정책의 가치를 정책을 거치지 않고 직접 구한다.
+
+\subsection{상태 가치 함수의 벨만 최적 방정식}
+\label{sec:opt-v}
+
 최적 정책 $\pi_*$도 정책이므로 그 가치 함수 $v_*$는 벨만 방정식을 만족한다.
 \begin{equation}
   v_*(s) = \sum_a \pi_*(a\mid s) \sum_{s'} p(s'\mid s,a)\bigl\{r(s,a,s')+\gamma v_*(s')\bigr\}.
@@ -884,12 +955,6 @@ $\pi'$는 아래쪽 줄에서 모두 왼쪽으로 돌아간다. 무작위 정책
   v_*(s) = \max_{a} \bigl\{\, r\bigl(s,a,f(s,a)\bigr) + \gamma\, v_*\bigl(f(s,a)\bigr) \,\bigr\}.
   \label{eq:bellman-opt-det}
 \end{equation}
-$Q$에 대해서도 같은 치환이 성립한다. 식~\eqref{eq:q-bellman}의 $\sum_{a'}\pi(a'\mid s')$를
-$\max_{a'}$로 바꾸면 된다.
-\begin{equation}
-  q_*(s,a) = \sum_{s'} p(s'\mid s,a)\Bigl\{\, r(s,a,s') + \gamma \max_{a'} q_*(s',a') \Bigr\}.
-  \label{eq:q-bellman-opt}
-\end{equation}
 
 식~\eqref{eq:bellman}과 식~\eqref{eq:bellman-opt}의 차이는 $\sum_a \pi(a\mid s)$ 자리에 $\max_a$가
 들어간 것 하나뿐이다. 그러나 이 한 글자가 세 가지를 바꾼다.
@@ -903,6 +968,18 @@ $\max_{a'}$로 바꾸면 된다.
         (\S\ref{sec:contraction}). 그래서 4.5절 가치 반복법이 성립한다.
 \end{enumerate}
 
+\subsection{행동 가치 함수의 벨만 최적 방정식}
+\label{sec:opt-q}
+
+$Q$에 대해서도 같은 치환이 성립한다. 식~\eqref{eq:q-bellman}에서 다음 상태의 행동을 정책으로 평균내던
+$\sum_{a'}\pi(a'\mid s')$를 $\max_{a'}$로 바꾸면 된다.
+\begin{equation}
+  \boxed{\;
+  q_*(s,a) = \sum_{s'} p(s'\mid s,a)\Bigl\{\, r(s,a,s') + \gamma \max_{a'} q_*(s',a') \Bigr\}.
+  \;}
+  \label{eq:q-bellman-opt}
+\end{equation}
+
 식~\eqref{eq:q-bellman-opt}에서 $\max$가 \emph{안쪽}에 있다는 점은 따로 기억해 둘 만하다. 6장 Q 러닝의
 갱신식
 \begin{equation}
@@ -912,9 +989,96 @@ $\max_{a'}$로 바꾸면 된다.
 의 대괄호 안이 정확히 식~\eqref{eq:q-bellman-opt}의 우변에서 좌변을 뺀 것이다. 식~\eqref{eq:q-bellman}의
 SARSA 형태와 나란히 놓으면 두 알고리즘의 차이가 $\sum_{a'}\pi(a'\mid s')$ 대 $\max_{a'}$ 하나로 줄어든다.
 
-\subsection{두 칸 세계의 최적 가치}
+\subsection{[보충] 최적 벨만 연산자도 축소 사상이다}
+\label{sec:contraction}
 
-같은 두 칸짜리 그리드 월드로 돌아간다. 이번에는 정책이 주어지지 않는다.
+$\max$ 때문에 행렬 풀이는 막혔지만 반복 대입은 통한다고 했다. 그 근거를 확인한다. 최적 벨만 연산자를
+\begin{equation}
+  (\Tstar v)(s) = \max_a \sum_{s'} p(s'\mid s,a)\bigl\{r(s,a,s')+\gamma v(s')\bigr\}
+  \label{eq:opt-operator}
+\end{equation}
+로 두면, 벨만 최적 방정식은 $v_* = \Tstar v_*$라는 고정점 방정식이다.
+
+\S\ref{sec:significance}에서 본 $\Tpi$와 견주면 달라진 곳은 하나뿐이다. 둘 다 표 $v$를 받아 표를 내놓는
+기계이고 둘 다 ``한 걸음은 진짜로 굴리고 나머지는 $v$로 때운다''는 계산을 하지만, $\Tpi$는 행동마다 나온
+값을 정책 확률로 \emph{평균}내는 데 비해 $\Tstar$는 그중 가장 큰 것을 \emph{고른다}. 상태마다 모든 행동을
+하나씩 시켜 보고 성적이 제일 좋은 것을 그 칸에 적는 기계라고 읽으면 된다.
+
+두 칸 세계에서 이 기계를 손으로 돌려 보면 하는 일이 그대로 드러난다. 상태 전이가 결정적이므로
+식~\eqref{eq:bellman-opt-det}에 따라 상태마다 후보가 둘뿐이다. 표~\ref{tab:opt-iter}가 $v_0=0$에서 출발한
+처음 여섯 번이다.
+
+\begin{table}[htbp]
+\centering
+\caption{두 칸 세계에서 $v_{k+1}=\Tstar v_k$를 손으로 돌린 것($\gamma=0.9$). 가운데 두 묶음은 그 칸에서
+계산되는 두 후보 $r+\gamma v_k(s')$이고, 굵은 값이 $\max$로 뽑혀 다음 줄의 $v_{k+1}$이 된다. 굵은 자리가
+한 번도 바뀌지 않는 것과, 맨 아랫줄에서 넣은 값과 뽑힌 값이 같아지는 것이 볼 곳이다.}
+\label{tab:opt-iter}
+\small
+\begin{tabular}{@{}rrrrrrr@{}}
+\toprule
+ & \multicolumn{2}{c}{현재 표 $v_k$} & \multicolumn{2}{c}{$\Lone$의 두 후보} & \multicolumn{2}{c}{$\Ltwo$의 두 후보} \\
+\cmidrule(r){2-3}\cmidrule(lr){4-5}\cmidrule(l){6-7}
+$k$ & $v_k(\Lone)$ & $v_k(\Ltwo)$ & \texttt{Left} & \texttt{Right} & \texttt{Left} & \texttt{Right} \\
+\midrule
+$0$ & $0.0000$ & $0.0000$ & $-1.0000$ & $\mathbf{1.0000}$ & $\mathbf{0.0000}$ & $-1.0000$ \\
+$1$ & $1.0000$ & $0.0000$ & $-0.1000$ & $\mathbf{1.0000}$ & $\mathbf{0.9000}$ & $-1.0000$ \\
+$2$ & $1.0000$ & $0.9000$ & $-0.1000$ & $\mathbf{1.8100}$ & $\mathbf{0.9000}$ & $-0.1900$ \\
+$3$ & $1.8100$ & $0.9000$ & $0.6290$  & $\mathbf{1.8100}$ & $\mathbf{1.6290}$ & $-0.1900$ \\
+$4$ & $1.8100$ & $1.6290$ & $0.6290$  & $\mathbf{2.4661}$ & $\mathbf{1.6290}$ & $0.4661$ \\
+$5$ & $2.4661$ & $1.6290$ & $1.2195$  & $\mathbf{2.4661}$ & $\mathbf{2.2195}$ & $0.4661$ \\
+\midrule
+$\infty$ & $5.2632$ & $4.7368$ & $3.7368$ & $\mathbf{5.2632}$ & $\mathbf{4.7368}$ & $3.2632$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+표~\ref{tab:opt-iter}가 보여주는 것이 둘이다. 첫째, 굵은 자리가 $k=0$부터 줄곧
+$(\texttt{Right},\texttt{Left})$이며 한 번도 옮겨 다니지 않는다. \S\ref{sec:cases}에서 손풀이가 가정하고
+검증해야 했던 그 선택을 $\max$가 매 반복 스스로 고르고 있는 것이다. 둘째, 맨 아랫줄에서 넣은 표
+$(5.2632,\,4.7368)$과 뽑혀 나온 표가 정확히 같다. 넣은 것이 그대로 나왔으므로 이 표가 $\Tstar$의
+고정점이고, 그것이 곧 $v_*$다.
+
+남은 문제는 이 반복이 \emph{항상} 그 고정점으로 가느냐다. 핵심은 $\max$가 비확장적이라는 다음 보조
+사실이다.
+
+\begin{proposition}[$\max$의 비확장성]
+\label{prop:max}
+임의의 유한 집합 $\Aset$ 위의 함수 $f,g$에 대해
+$\bigl|\max_a f(a) - \max_a g(a)\bigr| \le \max_a \bigl|f(a)-g(a)\bigr|$이다.
+\end{proposition}
+\begin{proof}
+$\bar a = \arg\max_a f(a)$라 하면
+$\max_a f(a) - \max_a g(a) \le f(\bar a) - g(\bar a) \le \max_a|f(a)-g(a)|$이다.
+$f$와 $g$의 역할을 바꾸면 반대 방향의 부등식도 같은 방식으로 얻어진다.
+\end{proof}
+
+\begin{corollary}
+$\|\Tstar v - \Tstar w\|_\infty \le \gamma\,\|v-w\|_\infty$이며, 따라서 $\Tstar$는 $\gamma$-축소
+사상이다. 벨만 최적 방정식의 해는 유일하게 존재하고, 임의의 $v_0$에서 출발한 $v_{k+1}=\Tstar v_k$는
+$v_*$로 수렴한다.
+\end{corollary}
+\begin{proof}
+각 $s$에 대해 명제~\ref{prop:max}를 적용하면
+$|(\Tstar v)(s)-(\Tstar w)(s)| \le \max_a\bigl|\gamma\sum_{s'}p(s'\mid s,a)\{v(s')-w(s')\}\bigr|
+\le \gamma\|v-w\|_\infty$이다. 나머지는 바나흐 고정점 정리다.
+\end{proof}
+
+정리하면 $\max$는 선형성만 깨뜨렸을 뿐 축소성은 건드리지 않았다. 명제~\ref{prop:contraction}에서
+$\gamma$가 나온 자리도 $\max$의 비확장성 뒤에 그대로 남아 있으므로, \S\ref{sec:rate}의 수렴률 논의와
+\S\ref{sec:cost}의 반복 횟수 추정이 최적 방정식에도 적용된다. 4장의 정책 평가와 가치 반복법이 사실상
+같은 알고리즘인 이유다.
+
+% =============================================================================
+\section{벨만 최적 방정식의 예}
+\label{sec:opt-example}
+% =============================================================================
+
+\subsection{벨만 최적 방정식 적용}
+\label{sec:opt-apply}
+
+같은 두 칸짜리 그리드 월드로 돌아간다. 이번에는 정책이 주어지지 않는다. 최적 정책이 무엇인지도 함께
+찾아야 한다.
 
 \begin{figure}[htbp]
 \centering
@@ -976,6 +1140,28 @@ $\max$가 있는 채로는 풀 수 없으므로, 어느 쪽이 이길지 \emph{�
 \label{fig:opt-result}
 \end{figure}
 
+예제 \texttt{s04\_bellman\_optimal.py}는 손풀이를 거치지 않고 식~\eqref{eq:bellman-opt-det}을 그대로 반복
+대입하여 같은 값에 도달한다. $\max$가 매 반복마다 스스로 옳은 가지를 골라 주므로 가정과 검증이라는
+절차 자체가 필요 없다.
+
+\paragraph{예제는 왜 정확히 333회에서 멈추는가.}
+이 예제는 갱신량 \lstinline|delta|가 정확히 $0$이 될 때까지 돌아 333회에서 멈춘다. 이 숫자는 부동소수점
+분해능에서 나온다. 수렴값 $v_*(\Lone)=5.2632$ 부근에서 배정밀도의 최소 간격(1\,ulp)은
+$8.882\times10^{-16}$인데, 이론적 갱신량 $\gamma^k$가 이 값 아래로 내려가는 지점이
+\begin{equation}
+  k = \frac{\ln\bigl(8.882\times10^{-16}\bigr)}{\ln 0.9} = 328.9
+\end{equation}
+이다. 실측하면 $k=328$부터 \lstinline|delta|가 정확히 1\,ulp에 고정된 채 다섯 번 반복되다가 333회에서
+$0$이 된다. 즉 알고리즘이 수렴을 판정한 것이 아니라 \emph{더 이상 표현할 수 있는 다음 값이 없어} 멈춘
+것이다. 실용적으로는 이렇게 $0$을 기다리기보다 문턱 $\varepsilon$을 두고 식~\eqref{eq:iter-count}만큼만
+도는 편이 낫다.
+
+같은 반복을 $3\times4$ 그리드에 적용하면 6회 만에 끝난다. 두 칸 세계와 달리 목표 상태라는 흡수 상태가
+있어 가치가 유한 걸음 안에 확정되기 때문이며, 반복 횟수를 지배하는 것이 $\gamma$만은 아님을 보여준다.
+
+\subsection{최적 정책 구하기}
+\label{sec:opt-policy}
+
 최적 가치를 알면 최적 정책은 탐욕적으로 뽑는다. $Q$가 있으면 한 줄이다.
 \begin{equation}
   \mu_*(s) = \arg\max_{a} q_*(s,a).
@@ -989,12 +1175,16 @@ $V$만 있으면 한 걸음 내다봐야 한다.
 식~\eqref{eq:greedy-v}의 우변에 $p$와 $r$가 등장한다는 것이 표~\ref{tab:v-vs-q}가 말한 $Q$의 장점이
 드러나는 자리다. 환경 모델을 모르면 $V$에서 정책을 뽑을 수 없다.
 
+두 칸 세계에서 식~\eqref{eq:greedy-v}를 적용하면 $\Lone$에서 \texttt{Right}, $\Ltwo$에서 \texttt{Left}가
+나온다(그림~\ref{fig:opt-result} 오른쪽). 앞 장이 네 가지 정책을 전부 평가해 골라냈던 $\mu_2$와 같은
+정책이며, 사과를 먹고 되돌아오기를 반복하는 행동이다.
+
 \subsection{[보충] 네 가지 가정 중 무엇이 자기일관인가}
 \label{sec:cases}
 
-앞 절의 손풀이는 ``$\Lone$에서 \texttt{Right}, $\Ltwo$에서 \texttt{Left}''라는 가정에서 출발했다. 이
-가정이 맞았음을 사후 검증했지만, 다른 세 가정을 택했다면 어떤 일이 벌어졌을지는 확인하지 않았다.
-결정적 정책이 네 가지뿐이므로 전부 풀어 볼 수 있다. 가정한 정책 $\mu$에 대해 $\max$를 제거한 연립
+\S\ref{sec:opt-apply}의 손풀이는 ``$\Lone$에서 \texttt{Right}, $\Ltwo$에서 \texttt{Left}''라는 가정에서
+출발했다. 이 가정이 맞았음을 사후 검증했지만, 다른 세 가정을 택했다면 어떤 일이 벌어졌을지는 확인하지
+않았다. 결정적 정책이 네 가지뿐이므로 전부 풀어 볼 수 있다. 가정한 정책 $\mu$에 대해 $\max$를 제거한 연립
 일차방정식 $(I-\gamma P_\mu)v = r_\mu$를 풀고, 그 해가 식~\eqref{eq:opt-two}의 $\max$를 실제로 달성하는지
 검사한 결과가 표~\ref{tab:cases}다.
 
@@ -1027,59 +1217,8 @@ $(\texttt{Right},\,\texttt{Right})$ & & $-8.0000$  & $-10.0000$ & (\texttt{Right
 가정이 나쁘면 방정식은 여전히 답을 주되 그 답은 ``그 나쁜 정책의 가치''일 뿐이며, 자기일관성 검사만이
 그것을 걸러낸다. 검사를 생략하면 $\max$를 임의로 제거한 식의 해를 최적 가치로 착각하게 된다.
 
-\subsection{[보충] 최적 벨만 연산자도 축소 사상이다}
-\label{sec:contraction}
-
-$\max$ 때문에 행렬 풀이는 막혔지만 반복 대입은 통한다고 했다. 그 근거를 확인한다. 최적 벨만 연산자를
-\begin{equation}
-  (\Tstar v)(s) = \max_a \sum_{s'} p(s'\mid s,a)\bigl\{r(s,a,s')+\gamma v(s')\bigr\}
-\end{equation}
-로 두면, 벨만 최적 방정식은 $v_* = \Tstar v_*$라는 고정점 방정식이다. 핵심은 $\max$가 비확장적이라는
-다음 보조 사실이다.
-
-\begin{proposition}[$\max$의 비확장성]
-\label{prop:max}
-임의의 유한 집합 $\Aset$ 위의 함수 $f,g$에 대해
-$\bigl|\max_a f(a) - \max_a g(a)\bigr| \le \max_a \bigl|f(a)-g(a)\bigr|$이다.
-\end{proposition}
-\begin{proof}
-$\bar a = \arg\max_a f(a)$라 하면
-$\max_a f(a) - \max_a g(a) \le f(\bar a) - g(\bar a) \le \max_a|f(a)-g(a)|$이다.
-$f$와 $g$의 역할을 바꾸면 반대 방향의 부등식도 같은 방식으로 얻어진다.
-\end{proof}
-
-\begin{corollary}
-$\|\Tstar v - \Tstar w\|_\infty \le \gamma\,\|v-w\|_\infty$이며, 따라서 $\Tstar$는 $\gamma$-축소
-사상이다. 벨만 최적 방정식의 해는 유일하게 존재하고, 임의의 $v_0$에서 출발한 $v_{k+1}=\Tstar v_k$는
-$v_*$로 수렴한다.
-\end{corollary}
-\begin{proof}
-각 $s$에 대해 명제~\ref{prop:max}를 적용하면
-$|(\Tstar v)(s)-(\Tstar w)(s)| \le \max_a\bigl|\gamma\sum_{s'}p(s'\mid s,a)\{v(s')-w(s')\}\bigr|
-\le \gamma\|v-w\|_\infty$이다. 나머지는 바나흐 고정점 정리다.
-\end{proof}
-
-정리하면 $\max$는 선형성만 깨뜨렸을 뿐 축소성은 건드리지 않았다. 명제~\ref{prop:contraction}에서
-$\gamma$가 나온 자리도 $\max$의 비확장성 뒤에 그대로 남아 있으므로, \S\ref{sec:rate}의 수렴률 논의와
-\S\ref{sec:cost}의 반복 횟수 추정이 최적 방정식에도 적용된다. 4장의 정책 평가와 가치 반복법이 사실상
-같은 알고리즘인 이유다.
-
-\paragraph{예제는 왜 정확히 333회에서 멈추는가.}
-\texttt{s04\_bellman\_optimal.py}는 갱신량 \lstinline|delta|가 정확히 $0$이 될 때까지 돌아 333회에서
-멈춘다. 이 숫자는 부동소수점 분해능에서 나온다. 수렴값 $v_*(\Lone)=5.2632$ 부근에서 배정밀도의 최소
-간격(1\,ulp)은 $8.882\times10^{-16}$인데, 이론적 갱신량 $\gamma^k$가 이 값 아래로 내려가는 지점이
-\begin{equation}
-  k = \frac{\ln\bigl(8.882\times10^{-16}\bigr)}{\ln 0.9} = 328.9
-\end{equation}
-이다. 실측하면 $k=328$부터 \lstinline|delta|가 정확히 1\,ulp에 고정된 채 다섯 번 반복되다가 333회에서
-$0$이 된다. 즉 알고리즘이 수렴을 판정한 것이 아니라 \emph{더 이상 표현할 수 있는 다음 값이 없어} 멈춘
-것이다. 실용적으로는 이렇게 $0$을 기다리기보다 문턱 $\varepsilon$을 두고 식~\eqref{eq:iter-count}만큼만
-도는 편이 낫다.
-
-같은 반복을 $3\times4$ 그리드에 적용하면 6회 만에 끝난다. 두 칸 세계와 달리 목표 상태라는 흡수 상태가
-있어 가치가 유한 걸음 안에 확정되기 때문이며, 반복 횟수를 지배하는 것이 $\gamma$만은 아님을 보여준다.
-
 \subsection{세 방법의 대조}
+\label{sec:three}
 
 예제 \texttt{s04\_bellman\_optimal.py}는 같은 답에 이르는 세 가지 경로를 나란히 놓고
 \lstinline|assert|로 일치를 확인한다. 표~\ref{tab:three-methods}가 그 대조다.
@@ -1106,7 +1245,8 @@ $0$이 된다. 즉 알고리즘이 수렴을 판정한 것이 아니라 \emph{�
 $4^{100}$이고 다른 쪽은 $100\times4\times K$다.
 
 % =============================================================================
-\section{결론}
+\section{정리}
+\label{sec:summary}
 % =============================================================================
 
 본고는 벨만 방정식이 앞 장에서 만난 두 벽을 어떻게 허무는지를 정리하였다.
@@ -1125,6 +1265,9 @@ $4^{100}$이고 다른 쪽은 $100\times4\times K$다.
 $\arg\max_a q(s,a)$로 행동을 고를 수 있다는 것이 $Q$의 값어치이며, 5장 이후 모델 없는 기법들이 예외 없이
 $Q$를 추정하는 근거다. 벨만 최적 방정식은 $\sum_a\pi(a\mid s)$ 자리를 $\max_a$로 바꾼 것으로
 (식~\eqref{eq:bellman-opt}, \eqref{eq:q-bellman-opt}), 정책이 식에서 사라지는 대신 선형성을 잃는다.
+최적 가치를 알고 나면 최적 정책은 $\mu_*(s)=\arg\max_a q_*(s,a)$로 탐욕적으로 뽑으면 되고, 두 칸 세계에서
+그 답은 $v_*(\Lone)=5.2632$, $v_*(\Ltwo)=4.7368$, $\pi_*=(\texttt{Right},\texttt{Left})$다. 앞 장이 정책
+네 가지를 전부 평가해 얻은 것을 이 장은 방정식 두 줄로 얻었다.
 
 보충 분석에서 얻은 결론은 다음 네 가지다.
 
@@ -1143,9 +1286,9 @@ $-0.212\to0.760$). 최댓값은 평균보다 작을 수 없다는 사실 하나�
 그러나 아래쪽 세 칸은 최적값에 최대 $0.279$ 못 미치는데, 탐욕화의 근거가 된 $Q$가 여전히 \emph{낡은}
 정책의 것이기 때문이다. 이 간극이 4장 정책 반복법이 ``반복''인 이유다.
 
-넷째, 손풀이에서 네 가지 결정적 정책 가정 중 자기일관인 것은 $(\texttt{Right},\texttt{Left})$ 하나뿐이며,
-나머지 셋은 여전히 해를 주되 그것은 그 나쁜 정책의 가치일 뿐이다. 한편 $\max$는 비확장적이므로
-$\Tstar$ 역시 $\gamma$-축소 사상이고, 그래서 경우 분석을 건너뛴 반복 대입이 통한다. 예제가 333회에서
+넷째, $\max$는 비확장적이므로 $\Tstar$ 역시 $\gamma$-축소 사상이고, 그래서 경우 분석을 건너뛴 반복 대입이
+통한다. 손풀이 쪽에서 보면 네 가지 결정적 정책 가정 중 자기일관인 것은 $(\texttt{Right},\texttt{Left})$
+하나뿐이며, 나머지 셋은 여전히 해를 주되 그것은 그 나쁜 정책의 가치일 뿐이다. 예제가 333회에서
 멈추는 것은 수렴 판정이 아니라 $\gamma^k$가 1\,ulp $=8.882\times10^{-16}$ 아래로 내려간 결과다.
 
 다음 장에서는 이 방정식들을 반복 계산으로 푸는 동적 프로그래밍을 다룬다. 벨만 방정식의 반복이
@@ -1169,10 +1312,10 @@ $0.0668$을 회수하기 위해 평가와 탐욕화를 번갈아 돌리는 것�
 \toprule
 파일 & 내용 & 대응 절 \\
 \midrule
-\texttt{ch03/s01\_bellman\_linear.py}    & $(I-\gamma P_\pi)v=r_\pi$의 직접 해                & \S\ref{sec:linear} \\
+\texttt{ch03/s01\_bellman\_linear.py}    & $(I-\gamma P_\pi)v=r_\pi$의 직접 해                & \S\ref{sec:two-square} \\
 \texttt{ch03/s02\_bellman\_iterative.py} & 반복 대입과 오차의 지수적 감소                    & \S\ref{sec:rate} \\
-\texttt{ch03/s03\_q\_function.py}        & $V\leftrightarrow Q$ 변환과 식~\eqref{eq:q-bellman} 검증 & \S4 \\
-\texttt{ch03/s04\_bellman\_optimal.py}   & 벨만 최적 방정식의 반복 대입, 손풀이, 전수 탐색 대조 & \S5 \\
+\texttt{ch03/s03\_q\_function.py}        & $V\leftrightarrow Q$ 변환과 식~\eqref{eq:q-bellman} 검증 & \S\ref{sec:qsec} \\
+\texttt{ch03/s04\_bellman\_optimal.py}   & 벨만 최적 방정식의 반복 대입, 손풀이, 전수 탐색 대조 & \S\ref{sec:opt-example} \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -1180,7 +1323,7 @@ $0.0668$을 회수하기 위해 평가와 탐욕화를 번갈아 돌리는 것�
 표~\ref{tab:two-square-values}, \ref{tab:grid-random}, \ref{tab:q-values}, \ref{tab:three-methods}과
 그림~\ref{fig:iterative}은 표~\ref{tab:code}의 예제를 그대로 실행해 얻은 출력이다.
 표~\ref{tab:ratio}(오차와 비율의 자릿수 확장), 표~\ref{tab:cost}, 표~\ref{tab:greedy},
-표~\ref{tab:policy-map}, 표~\ref{tab:cases}, 그리고 \S\ref{sec:contraction}의 ulp 계산은 본고를 위해
+표~\ref{tab:policy-map}, 표~\ref{tab:cases}, 그리고 \S\ref{sec:opt-apply}의 ulp 계산은 본고를 위해
 별도로 계산한 값이다.
 
 표~\ref{tab:greedy}의 $v_{\pi'}$는 탐욕화한 정책을 다시 식~\eqref{eq:matrix-form}으로 정확히 푼 값이며,
