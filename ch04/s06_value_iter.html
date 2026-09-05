@@ -1,0 +1,1119 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>두 단계를 max 하나로 — 가치 반복법</title>
+<meta name="description" content="4장 가치 반복법을 한 스윕씩·한 칸씩 돌려보고 정책 반복법과 견줘보는 그리드 월드 데모.">
+<style>
+/* 색과 기본 서식 — s04_policy_eval.html, s05_policy_iter.html 과 같은 토큰을 쓴다 */
+:root {
+  --bg: #f7f8fa;
+  --surface: #ffffff;
+  --border: #e2e5ea;
+  --text: #1c2024;
+  --text-dim: #5c6570;
+  --text-faint: #8b939d;
+  --accent: #2f6bd8;
+  --accent-soft: #eaf0fc;
+  --answer-bg: #f2f7f1;
+  --done: #3f8f52;
+  --minus: #a63d5c;
+  --improve: #b4711f;        /* 탐욕화 — 그림 4-14의 주황 화살표 */
+  --improve-soft: #fbf1e2;
+  --fuse: #6f52c9;           /* 평가와 개선이 하나로 합쳐진 갱신 [식 4.13] */
+  --fuse-soft: #f0ecfb;
+  --shadow: 0 1px 2px rgba(20, 25, 35, .06), 0 1px 8px rgba(20, 25, 35, .04);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #14171b;
+    --surface: #1c2025;
+    --border: #2e343b;
+    --text: #e6e9ec;
+    --text-dim: #a3acb6;
+    --text-faint: #78828d;
+    --accent: #7aa7f0;
+    --accent-soft: #212b3d;
+    --answer-bg: #1b2620;
+    --done: #6fbd82;
+    --minus: #e08fa8;
+    --improve: #e0a458;
+    --improve-soft: #2e2617;
+    --fuse: #a892f2;
+    --fuse-soft: #272042;
+    --shadow: 0 1px 2px rgba(0, 0, 0, .3), 0 1px 8px rgba(0, 0, 0, .2);
+  }
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo",
+    "Pretendard", "Malgun Gothic", "Noto Sans KR", sans-serif;
+  font-size: 16px;
+  line-height: 1.7;
+  -webkit-text-size-adjust: 100%;
+}
+
+.wrap { max-width: 860px; margin: 0 auto; padding: 32px 20px 80px; }
+
+a { color: var(--accent); }
+
+code {
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  font-size: .9em;
+  background: var(--accent-soft);
+  padding: .1em .35em;
+  border-radius: 4px;
+}
+
+.masthead { margin-bottom: 28px; }
+.masthead h1 { font-size: 1.65rem; margin: 0 0 6px; letter-spacing: -.02em; }
+.masthead p { margin: 0; color: var(--text-dim); font-size: .93rem; }
+
+button {
+  font: inherit;
+  font-size: .85rem;
+  padding: 5px 12px;
+  border-radius: 7px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text-dim);
+  cursor: pointer;
+  transition: border-color .15s, color .15s;
+}
+
+button:hover { border-color: var(--accent); color: var(--accent); }
+
+.footer {
+  margin-top: 56px;
+  padding-top: 20px;
+  border-top: 1px solid var(--border);
+  font-size: .8rem;
+  color: var(--text-faint);
+  line-height: 1.75;
+}
+.footer p { margin: 0 0 6px; }
+</style>
+<style>
+  .panel {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    box-shadow: var(--shadow);
+    padding: 16px 18px;
+    margin-bottom: 16px;
+  }
+
+  /* ---------- 조작부 ---------- */
+
+  .controls { display: flex; flex-wrap: wrap; align-items: center; gap: 14px 20px; }
+
+  .ctl { display: flex; align-items: center; gap: 8px; font-size: .86rem; color: var(--text-dim); }
+
+  .ctl input[type=range] { width: 160px; accent-color: var(--accent); }
+
+  .ctl .val {
+    font-variant-numeric: tabular-nums;
+    font-weight: 700;
+    color: var(--text);
+    min-width: 2.6em;
+  }
+
+  .seg { display: inline-flex; border: 1px solid var(--border); border-radius: 7px; overflow: hidden; }
+  .seg button { border: 0; border-radius: 0; padding: 5px 11px; }
+  .seg button + button { border-left: 1px solid var(--border); }
+  .seg button[aria-pressed="true"] { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+
+  .actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; align-items: center; }
+
+  button.primary {
+    font-size: .92rem;
+    font-weight: 600;
+    padding: 8px 18px;
+    background: var(--fuse);
+    border-color: var(--fuse);
+    color: #fff;
+    min-width: 12em;
+  }
+  button.primary:hover { background: var(--fuse); color: #fff; filter: brightness(1.08); }
+
+  /* 마지막 탐욕화만 주황 — 여기서만 정책이 등장한다 */
+  button.primary.extract { background: var(--improve); border-color: var(--improve); }
+  button.primary:disabled { background: var(--border); border-color: var(--border); color: var(--text-faint); cursor: default; filter: none; }
+
+  .hint { font-size: .78rem; color: var(--text-faint); margin-left: auto; }
+
+  /* ---------- 상태 표시 ---------- */
+
+  .stats { display: flex; flex-wrap: wrap; gap: 10px 26px; align-items: baseline; }
+
+  .stat .label { font-size: .74rem; color: var(--text-faint); display: block; letter-spacing: .03em; }
+  .stat .num { font-size: 1.15rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+
+  .flag {
+    font-size: .72rem;
+    font-weight: 700;
+    padding: 2px 9px;
+    border-radius: 20px;
+    background: var(--fuse-soft);
+    color: var(--fuse);
+  }
+  .flag.extract { background: var(--improve-soft); color: var(--improve); }
+  .flag.done { background: var(--answer-bg); color: var(--done); }
+
+  /* ---------- Δ 그래프 ---------- */
+
+  .chart { margin: 18px 0 0; }
+
+  .chart figcaption {
+    font-size: .78rem;
+    color: var(--text-faint);
+    margin-bottom: 8px;
+  }
+
+  .chart svg { display: block; width: 100%; }
+
+  .chart .frame { fill: none; stroke: var(--border); stroke-width: 1; }
+  .chart .gridline { stroke: var(--border); stroke-dasharray: 2 3; opacity: .8; }
+  .chart .tick { stroke: var(--border); }
+
+  .chart text {
+    fill: var(--text-faint);
+    font-size: 10.5px;
+    font-variant-numeric: tabular-nums;
+  }
+  .chart .axis-name { fill: var(--text-dim); }
+
+  .chart .thr { stroke: var(--done); stroke-width: 1.2; stroke-dasharray: 5 3; }
+  .chart .thr-label { fill: var(--done); font-weight: 600; }
+
+  .chart .line { fill: none; stroke: var(--fuse); stroke-width: 1.7; stroke-linejoin: round; }
+  .chart .dot { fill: var(--fuse); }
+  .chart .line-label { fill: var(--fuse); font-weight: 600; }
+
+  .chart .pi-line { fill: none; stroke: var(--text-faint); stroke-width: 1.2; opacity: .75; stroke-linejoin: round; }
+  .chart .pi-label { fill: var(--text-faint); font-weight: 600; }
+  .chart .cyc { stroke: var(--improve); stroke-width: 1; stroke-dasharray: 3 3; opacity: .5; }
+
+  /* ---------- 그리드 ---------- */
+
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 8px;
+  }
+
+  .cell {
+    position: relative;
+    aspect-ratio: 1.25 / 1;
+    min-height: 82px;
+    border: 1px solid var(--border);
+    border-radius: 9px;
+    background-color: var(--surface);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0;
+    cursor: pointer;
+    font: inherit;
+    color: var(--text);
+    padding: 4px;
+    transition: box-shadow .12s, border-color .12s;
+  }
+
+  .cell:hover { border-color: var(--accent); }
+
+  .cell .v {
+    font-size: 1.22rem;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: -.01em;
+  }
+  /* 이번 스윕에 값이 바뀐 칸 — 목표에서 한 칸씩 번져 나가는 모습이 보이도록 */
+  .cell.changed .v { color: var(--fuse); }
+
+  .cell .coord {
+    position: absolute;
+    top: 5px;
+    left: 7px;
+    font-size: .66rem;
+    color: var(--text-faint);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .cell .tag {
+    position: absolute;
+    top: 5px;
+    right: 7px;
+    font-size: .68rem;
+    font-weight: 700;
+  }
+  .cell .tag.plus { color: var(--done); }
+  .cell .tag.minus { color: var(--minus); }
+
+  /* 화살표는 알고리즘이 들고 있는 것이 아니라 지금 V를 탐욕화해 본 결과다.
+     그래서 도중에는 흐리게, 마지막 탐욕화 뒤에야 또렷하게 */
+  .cell .pi { font-size: 1.05rem; line-height: 1.2; color: var(--text-faint); opacity: .55; }
+  .cell .pi.fixed { color: var(--improve); opacity: 1; }
+
+  .cell.wall {
+    background-color: var(--border);
+    background-image: none;
+    cursor: default;
+    color: var(--text-faint);
+    font-size: .8rem;
+  }
+  .cell.wall:hover { border-color: var(--border); }
+
+  .cell.updated { border-color: var(--fuse); box-shadow: 0 0 0 2px var(--fuse-soft); }
+  .cell.cursor { border-style: dashed; border-color: var(--text-faint); }
+  .cell.selected { border-color: var(--text-dim); box-shadow: 0 0 0 2px var(--border); }
+
+  .legend {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: .76rem;
+    color: var(--text-faint);
+    margin-top: 12px;
+  }
+  .legend .bar {
+    flex: 1;
+    height: 8px;
+    border-radius: 4px;
+    background: linear-gradient(90deg,
+      rgba(190, 70, 80, .45), rgba(190, 70, 80, 0), rgba(47, 107, 216, 0), rgba(47, 107, 216, .45));
+  }
+  .legend-note { font-size: .76rem; color: var(--text-faint); margin: 6px 0 0; }
+
+  /* ---------- 백업 / 비교 계산 ---------- */
+
+  .backup h2 { font-size: .95rem; margin: 0 0 4px; }
+  .backup .sub { font-size: .8rem; color: var(--text-faint); margin: 0 0 12px; }
+
+  table.terms { width: 100%; border-collapse: collapse; font-size: .84rem; font-variant-numeric: tabular-nums; }
+  table.terms th, table.terms td { padding: 5px 8px; border-bottom: 1px solid var(--border); text-align: right; }
+  table.terms th { color: var(--text-faint); font-weight: 600; font-size: .76rem; letter-spacing: .02em; }
+  table.terms th:first-child, table.terms td:first-child { text-align: left; }
+  table.terms tbody tr:last-child td { border-bottom: 0; }
+  table.terms tr.best td { background: var(--fuse-soft); color: var(--fuse); font-weight: 700; }
+  table.terms td.dim { color: var(--text-faint); }
+
+  /* 같은 열을 세 가지로 읽는다 — max / argmax / Σπ */
+  table.terms tfoot td { border-bottom: 0; border-top: 1px solid var(--border); font-weight: 700; }
+  table.terms tfoot tr:first-child td { border-top: 2px solid var(--border); }
+  table.terms tfoot tr.r-max td { color: var(--fuse); }
+  table.terms tfoot tr.r-arg td { color: var(--improve); }
+  table.terms tfoot tr.r-eval td { color: var(--text-faint); font-weight: 600; }
+  table.terms tfoot td .eq { font-weight: 400; font-size: .92em; color: var(--text-faint); }
+
+  table.cmp { width: 100%; border-collapse: collapse; font-size: .85rem; }
+  table.cmp th, table.cmp td { padding: 6px 8px; border-bottom: 1px solid var(--border); text-align: left; vertical-align: top; }
+  table.cmp thead th { font-size: .76rem; color: var(--text-faint); letter-spacing: .02em; }
+  table.cmp thead th.vi { color: var(--fuse); }
+  table.cmp tbody th { font-weight: 600; color: var(--text-dim); width: 8.5em; }
+  table.cmp tr:last-child td, table.cmp tr:last-child th { border-bottom: 0; }
+  table.cmp td b { font-variant-numeric: tabular-nums; }
+  table.cmp td.vi { background: var(--fuse-soft); }
+
+  .note { font-size: .84rem; color: var(--text-dim); }
+  .note code { font-size: .86em; }
+
+  details.about summary { cursor: pointer; font-size: .9rem; font-weight: 600; }
+  details.about > div { margin-top: 10px; font-size: .88rem; color: var(--text-dim); }
+  details.about ul { margin: 8px 0 0; padding-left: 20px; }
+  details.about li { margin-bottom: 5px; }
+
+  @media (max-width: 520px) {
+    .cell { min-height: 70px; }
+    .cell .v { font-size: 1rem; }
+    .cell .pi { font-size: .9rem; }
+    .ctl input[type=range] { width: 120px; }
+    button.primary { min-width: 9em; }
+    table.cmp tbody th { width: 6em; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="masthead">
+    <h1>두 단계를 max 하나로</h1>
+    <p>4.5절 가치 반복법 · <code>s06_value_iter.py</code>의 <code>value_iter()</code>를 한 걸음씩</p>
+  </header>
+
+  <section class="panel">
+    <div class="controls">
+      <label class="ctl">
+        할인율 γ
+        <input id="gamma" type="range" min="0" max="0.99" step="0.01" value="0.9">
+        <span class="val" id="gamma-val">0.90</span>
+      </label>
+
+      <span class="ctl">
+        진행 단위
+        <span class="seg" id="grain">
+          <button type="button" data-v="sweep" aria-pressed="true">한 스윕</button>
+          <button type="button" data-v="cell" aria-pressed="false">한 칸</button>
+        </span>
+      </span>
+
+      <span class="ctl">
+        정책 반복법 겹쳐 보기
+        <span class="seg" id="overlay">
+          <button type="button" data-v="off" aria-pressed="true">끄기</button>
+          <button type="button" data-v="on" aria-pressed="false">켜기</button>
+        </span>
+      </span>
+    </div>
+
+    <div class="actions">
+      <button type="button" class="primary" id="step">스윕 한 번</button>
+      <button type="button" id="run">수렴까지</button>
+      <button type="button" id="reset">초기화</button>
+      <span class="hint">스페이스바로도 진행됩니다</span>
+    </div>
+  </section>
+
+  <section class="panel">
+    <div class="stats">
+      <span class="stat"><span class="label">스윕 k</span><span class="num" id="k">0</span></span>
+      <span class="stat" id="cursor-stat"><span class="label">이번 스윕 진행</span><span class="num" id="cursor">0 / 11</span></span>
+      <span class="stat"><span class="label">직전 갱신폭 Δ</span><span class="num" id="delta">—</span></span>
+      <span class="stat"><span class="label">백업 횟수</span><span class="num" id="backups">0</span></span>
+      <span class="stat"><span class="label">국면</span><span class="flag" id="flag">시작 전</span></span>
+    </div>
+
+    <figure class="chart" id="chart">
+      <figcaption>스윕마다의 갱신폭 Δ · 회색은 같은 γ에서 정책 반복법이 그리는 선</figcaption>
+    </figure>
+  </section>
+
+  <section class="panel">
+    <div class="grid" id="grid"></div>
+    <div class="legend">
+      <span>낮음</span><span class="bar"></span><span>높음</span>
+      <span id="scale" style="margin-left:6px"></span>
+    </div>
+    <p class="legend-note" id="arrow-note"></p>
+  </section>
+
+  <section class="panel backup" id="backup"></section>
+
+  <section class="panel">
+    <h2 style="font-size:.95rem; margin:0 0 4px">정책 반복법과 견주기</h2>
+    <p class="sub" style="font-size:.8rem; color:var(--text-faint); margin:0 0 12px" id="cmp-sub"></p>
+    <div id="cmp"></div>
+  </section>
+
+  <section class="panel">
+    <details class="about">
+      <summary>이 화면이 계산하는 것</summary>
+      <div>
+        <p style="margin:0">
+          <code>value_iter_onestep()</code>의 열두 줄을 그대로 옮겼습니다. 국면이 하나뿐입니다.
+        </p>
+        <p style="margin:10px 0 0">
+          <b style="color:var(--fuse)">갱신</b>
+          <code>V(s) ← max<sub>a</sub> { r + γV(s′) }</code> 를 Δ &lt; 0.001 이 될 때까지 [식 4.13]<br>
+          <b style="color:var(--improve)">마지막에 한 번</b>
+          <code>π(s) ← argmax<sub>a</sub> { r + γV(s′) }</code> [식 4.12]
+        </p>
+        <ul>
+          <li>정책 평가([식 4.3])와 달라지는 곳은 <b>단 한 군데</b>입니다 —
+            <code>Σ<sub>a</sub> π(a|s)</code> 자리가 <code>max<sub>a</sub></code>로 바뀐 것뿐.
+            아래 표의 맨 밑 세 줄이 그 대비입니다. 같은 <code>r + γV(s′)</code> 열을
+            <b>max로 읽으면 가치 반복법, argmax로 읽으면 정책 개선, π를 곱해 더하면 정책 평가</b>입니다.
+            그림 4-22가 '같은 계산'이라고 말하는 부분이 이것입니다.</li>
+          <li>그래서 <b>진행 중에는 정책이 없습니다.</b> 칸의 화살표는 알고리즘이 들고 있는 것이 아니라
+            지금 V를 탐욕화해 본 결과라서 흐리게 그렸습니다. 수렴한 뒤 <b>마지막 탐욕화</b>를 눌러야
+            비로소 정책이 생기고 화살표가 또렷해집니다.</li>
+          <li>γ = 0.9에서 Δ는 <code>1.0 → 0.9 → 0.81 → 0</code>, <b>스윕 4번</b>이면 끝납니다.
+            정확히 <code>γ<sup>k</sup></code>씩 줄어드는데, 목표에서 흘러나온 정보가 한 스윕에 한 칸씩
+            번져 나가기 때문입니다. 값이 바뀐 칸은 보라색 숫자로 표시됩니다.</li>
+          <li>마지막 스윕의 Δ는 정확히 <b>0</b>입니다. 로그 눈금에는 그릴 수 없어 그래프 바닥에 붙습니다.
+            상태 전이가 결정적이고 보상이 <code>0, ±1</code>뿐이라 값이 딱 맞아떨어지는 것입니다.</li>
+          <li>'한 칸' 단위로 진행하면 제자리 갱신(4.1.2)이 스윕 안에서 앞서 나가는 것이 보입니다.
+            <b>한 칸을 갱신할 때마다 개선과 평가가 동시에 일어나는</b> 셈인데, 그림 4-21이 그린 모습입니다.</li>
+          <li>'겹쳐 보기'를 켜면 같은 γ에서 정책 반복법이 그리는 Δ 선이 회색으로 함께 뜹니다.
+            γ = 0.9에서 <b>32 스윕 대 4 스윕</b>. 회색 선이 톱니처럼 튀는 지점(주황 점선)이 정책을 개선한 곳입니다.
+            평가와 개선을 오가는 자세한 화면은 <a href="s05_policy_iter.html">s05_policy_iter.html</a>에 있습니다.</li>
+          <li>백업은 <code>r + γV(s′)</code>를 한 번 계산한 것을 하나로 셉니다. 목표 칸은 갱신하지 않으므로
+            스윕 한 번이 <code>10칸 × 4행동 = 40</code>회입니다.
+            README의 <code>240</code>회는 파이썬 코드가 훑는 <b>목표 칸과 벽 칸까지</b> 함께 센 값입니다
+            (어느 상태도 그 값을 읽지 않아 결과에는 영향이 없습니다).</li>
+          <li>최댓값이 동점인 칸은 <code>s05_policy_iter.py</code>의 <code>argmax()</code>와 똑같이
+            <b>행동 번호가 가장 큰 쪽</b>(↑ &lt; ↓ &lt; ← &lt; →)을 고릅니다.
+            갱신되는 <b>값</b>은 어느 쪽을 고르든 같으므로, 동점은 화살표에만 영향을 줍니다.</li>
+          <li>γ를 바꾸면 V = 0에서 다시 시작합니다. γ가 0보다 크기만 하면 <b>최적 정책은 언제나 같고</b>
+            스윕 수도 대체로 4회입니다 — 정책 반복법과 달리 γ가 커져도 거의 늘지 않습니다
+            (γ = 0.99에서도 4 스윕. 정책 반복법의 첫 평가는 74 스윕이 걸립니다).
+            γ = 0일 때만 한 걸음 앞의 보상밖에 못 봐 정책이 무너집니다.</li>
+        </ul>
+      </div>
+    </details>
+  </section>
+
+  <footer class="footer">
+    <p>
+      같은 그리드 월드의 정책 평가는
+      <a href="s04_policy_eval.html">s04_policy_eval.html</a>,
+      평가와 개선의 되먹임은
+      <a href="s05_policy_iter.html">s05_policy_iter.html</a>
+    </p>
+    <p>
+      예제 코드 저장소:
+      <a href="https://github.com/sajacaros/deep-learning-from-scratch-4" target="_blank" rel="noopener noreferrer">sajacaros/deep-learning-from-scratch-4</a>
+      · 원저작 코드
+      <a href="https://github.com/WegraLee/deep-learning-from-scratch-4" target="_blank" rel="noopener noreferrer">WegraLee/deep-learning-from-scratch-4</a>
+    </p>
+  </footer>
+
+</div>
+
+<script>
+/* 4장 가치 반복법 — common/gridworld.py 의 그리드 월드를 그대로 옮겼다 */
+
+const H = 3, W = 4;
+const REWARD = [
+  [0, 0, 0, 1.0],
+  [0, null, 0, -1.0],
+  [0, 0, 0, 0],
+];
+const GOAL = '0,3';
+const WALL = '1,1';
+const MOVES = [[-1, 0], [1, 0], [0, -1], [0, 1]];
+const ARROW = ['↑', '↓', '←', '→'];
+const ACTION_NAME = ['UP ↑', 'DOWN ↓', 'LEFT ←', 'RIGHT →'];
+const THRESHOLD = 0.001;
+
+const key = (y, x) => y + ',' + x;
+const parse = (s) => s.split(',').map(Number);
+
+/* 갱신 순서: 행 우선. 벽은 건너뛴다 */
+const ORDER = [];
+for (let y = 0; y < H; y++) {
+  for (let x = 0; x < W; x++) {
+    if (key(y, x) !== WALL) ORDER.push(key(y, x));
+  }
+}
+
+function nextState(y, x, a) {
+  const ny = y + MOVES[a][0], nx = x + MOVES[a][1];
+  if (nx < 0 || nx >= W || ny < 0 || ny >= H) return [y, x];  // 테두리 밖이면 제자리
+  if (key(ny, nx) === WALL) return [y, x];                    // 벽이어도 제자리
+  return [ny, nx];
+}
+
+/* 행동별 r + γV(s′). 가치 반복법도 정책 개선도 정책 평가도 전부 이 열에서 나온다.
+   그림 4-22의 '같은 계산' */
+function actionTerms(s, read, gamma) {
+  const [y, x] = parse(s);
+  const terms = [];
+  for (let a = 0; a < 4; a++) {
+    const [ny, nx] = nextState(y, x, a);
+    const r = REWARD[ny][nx];
+    const vNext = read[key(ny, nx)];
+    terms.push({ a, next: key(ny, nx), r, vNext, q: r + gamma * vNext });
+  }
+  return terms;
+}
+
+/* 동점이면 마지막에 나온 행동. s06_value_iter.py 가 재사용하는 argmax() 와 같은 규칙 */
+function bestOf(terms) {
+  const qs = terms.map((t) => t.q);
+  const best = qs.lastIndexOf(Math.max(...qs));
+  return { best, tied: qs.filter((q) => q === qs[best]).length > 1 };
+}
+
+/* ---------- 상태 ---------- */
+
+const S = {
+  gamma: 0.9,
+  grain: 'sweep',    // 'sweep' | 'cell'
+  overlay: false,
+  V: null,
+  phase: 'iter',     // 'iter' | 'extract' | 'done'
+  k: 0,              // 끝난 스윕 수
+  cursor: 0,         // 이번 스윕에서 다음에 갱신할 칸(ORDER 의 인덱스)
+  sweepDelta: 0,     // 이번 스윕에서 지금까지의 최대 갱신폭
+  lastDelta: null,
+  history: [],       // 스윕마다의 Δ
+  backups: 0,        // r + γV(s′) 를 계산한 횟수
+  pi: null,          // 마지막 탐욕화로 뽑은 정책. 그전에는 null
+  changed: [],       // 이번(또는 직전) 스윕에서 값이 바뀐 칸
+  updated: null,     // 방금 갱신한 칸
+  selected: null,
+};
+
+function reset() {
+  S.V = {};
+  for (const s of ORDER) S.V[s] = 0;
+  S.phase = 'iter';
+  S.k = 0;
+  S.cursor = 0;
+  S.sweepDelta = 0;
+  S.lastDelta = null;
+  S.history = [];
+  S.backups = 0;
+  S.pi = null;
+  S.changed = [];
+  S.updated = null;
+  render();
+}
+
+/* 칸 하나 갱신 — value_iter_onestep() 의 루프 몸통 하나 */
+function updateCell(s) {
+  const before = S.V[s];
+
+  if (s === GOAL) {
+    S.V[s] = 0;                       // 목표 상태의 가치는 항상 0
+  } else {
+    const terms = actionTerms(s, S.V, S.gamma);
+    S.backups += 4;
+    S.V[s] = Math.max(...terms.map((t) => t.q));   // 최댓값 추출
+  }
+
+  const d = Math.abs(S.V[s] - before);
+  if (d > S.sweepDelta) S.sweepDelta = d;
+  if (d > 1e-12) S.changed.push(s);
+  S.updated = s;
+}
+
+/* 스윕이 끝나는 순간 — Δ 를 기록하고 임계값과 견준다 */
+function endSweep() {
+  S.k++;
+  S.lastDelta = S.sweepDelta;
+  S.history.push(S.sweepDelta);
+  if (S.sweepDelta < THRESHOLD) S.phase = 'extract';
+  S.sweepDelta = 0;
+  S.cursor = 0;
+}
+
+function sweep() {
+  if (S.cursor === 0) S.changed = [];
+  while (S.cursor < ORDER.length) updateCell(ORDER[S.cursor++]);
+  endSweep();
+}
+
+function stepCell() {
+  if (S.cursor === 0) S.changed = [];
+  updateCell(ORDER[S.cursor++]);
+  if (S.cursor >= ORDER.length) endSweep();
+}
+
+/* 마지막 탐욕화 [식 4.12] — 여기서 처음이자 마지막으로 정책이 등장한다 */
+function extract() {
+  S.pi = {};
+  for (const s of ORDER) {
+    if (s === GOAL) continue;
+    const terms = actionTerms(s, S.V, S.gamma);
+    S.backups += 4;
+    S.pi[s] = bestOf(terms).best;
+  }
+  S.changed = [];
+  S.phase = 'done';
+}
+
+function step() {
+  if (S.phase === 'done') return;
+  if (S.phase === 'extract') extract();
+  else if (S.grain === 'cell') stepCell();
+  else sweep();
+  render();
+}
+
+function runToConvergence() {
+  let guard = 0;
+  while (S.phase === 'iter' && guard++ < 20000) sweep();
+  if (S.phase === 'extract') extract();
+  render();
+}
+
+/* ---------- 정책 반복법 견주기 (겹쳐 보기와 비교표에 쓴다) ---------- */
+
+/* 무작위 정책이라면 이 칸이 얼마가 되는가 — 표 맨 밑줄의 대비용 [식 4.3] */
+function uniformValue(terms) {
+  return terms.reduce((acc, t) => acc + 0.25 * t.q, 0);
+}
+
+function valueIterStats(gamma) {
+  const V = {};
+  for (const s of ORDER) V[s] = 0;
+  const history = [];
+  let backups = 0, guard = 0;
+
+  while (guard++ < 20000) {
+    let delta = 0;
+    for (const s of ORDER) {
+      const before = V[s];
+      if (s === GOAL) V[s] = 0;
+      else {
+        const terms = actionTerms(s, V, gamma);
+        backups += 4;
+        V[s] = Math.max(...terms.map((t) => t.q));
+      }
+      delta = Math.max(delta, Math.abs(V[s] - before));
+    }
+    history.push(delta);
+    if (delta < THRESHOLD) break;
+  }
+
+  const pi = {};
+  for (const s of ORDER) {
+    if (s === GOAL) continue;
+    backups += 4;
+    pi[s] = bestOf(actionTerms(s, V, gamma)).best;
+  }
+  return { history, sweeps: history.length, backups, pi, V };
+}
+
+function policyIterStats(gamma) {
+  let pi = null;                 // null 이면 아직 무작위 정책
+  const V = {};
+  for (const s of ORDER) V[s] = 0;
+
+  const history = [], marks = [], perCycle = [];
+  let backups = 0, total = 0, cycles = 0, guard = 0;
+
+  while (guard++ < 500) {
+    // 평가 — Δ < 임계값 까지
+    let sweeps = 0, g2 = 0;
+    while (g2++ < 20000) {
+      let delta = 0;
+      for (const s of ORDER) {
+        const before = V[s];
+        if (s === GOAL) V[s] = 0;
+        else {
+          const terms = actionTerms(s, V, gamma);
+          backups += 4;
+          V[s] = pi === null
+            ? uniformValue(terms)
+            : terms[pi[s]].q;      // 결정적 정책이면 고른 행동 하나뿐 [식 4.10]
+        }
+        delta = Math.max(delta, Math.abs(V[s] - before));
+      }
+      sweeps++; total++;
+      history.push(delta);
+      if (delta < THRESHOLD) break;
+    }
+    perCycle.push(sweeps);
+    marks.push(total);
+
+    // 개선
+    const next = {};
+    let same = pi !== null;
+    for (const s of ORDER) {
+      if (s === GOAL) continue;
+      backups += 4;
+      next[s] = bestOf(actionTerms(s, V, gamma)).best;
+      if (pi !== null && next[s] !== pi[s]) same = false;
+    }
+    cycles++;
+    if (same) return { history, marks, perCycle, sweeps: total, cycles, backups, pi, V };
+    pi = next;
+  }
+  return { history, marks, perCycle, sweeps: total, cycles, backups, pi, V };
+}
+
+let VI = null, PI = null;
+function recompute() {
+  VI = valueIterStats(S.gamma);
+  PI = policyIterStats(S.gamma);
+}
+
+/* ---------- 그리기 ---------- */
+
+const grid = document.getElementById('grid');
+
+function heat(v, scale) {
+  if (scale < 1e-9) return 'transparent';
+  const t = Math.max(-1, Math.min(1, v / scale));
+  const a = (Math.abs(t) * 0.45).toFixed(3);
+  return t >= 0 ? `rgba(47, 107, 216, ${a})` : `rgba(190, 70, 80, ${a})`;
+}
+
+/* 도중에 보여줄 화살표는 지금 V 를 탐욕화한 것. 알고리즘의 산출물이 아니다 */
+function shownArrow(s) {
+  if (S.pi) return S.pi[s];
+  if (S.k === 0 && S.cursor === 0) return null;   // 아직 아무 정보도 없을 때는 그리지 않는다
+  return bestOf(actionTerms(s, S.V, S.gamma)).best;
+}
+
+function render() {
+  let scale = 0;
+  for (const s of ORDER) scale = Math.max(scale, Math.abs(S.V[s]));
+  scale = Math.max(scale, 0.05);
+
+  const cursorKey = S.phase === 'iter' && S.grain === 'cell' ? ORDER[S.cursor] : null;
+
+  grid.innerHTML = '';
+  for (let y = 0; y < H; y++) {
+    for (let x = 0; x < W; x++) {
+      const s = key(y, x);
+      const cell = document.createElement('button');
+      cell.type = 'button';
+      cell.className = 'cell';
+
+      if (s === WALL) {
+        cell.classList.add('wall');
+        cell.disabled = true;
+        cell.textContent = '벽';
+        grid.appendChild(cell);
+        continue;
+      }
+
+      cell.style.backgroundImage =
+        `linear-gradient(${heat(S.V[s], scale)}, ${heat(S.V[s], scale)})`;
+
+      if (S.changed.includes(s)) cell.classList.add('changed');
+      if (s === S.updated && S.grain === 'cell' && S.phase !== 'done') cell.classList.add('updated');
+      if (s === cursorKey) cell.classList.add('cursor');
+      if (s === S.selected) cell.classList.add('selected');
+
+      const coord = document.createElement('span');
+      coord.className = 'coord';
+      coord.textContent = `(${y}, ${x})`;
+      cell.appendChild(coord);
+
+      const r = REWARD[y][x];
+      if (r) {
+        const tag = document.createElement('span');
+        tag.className = 'tag ' + (r > 0 ? 'plus' : 'minus');
+        tag.textContent = r > 0 ? '+1' : '−1';
+        cell.appendChild(tag);
+      }
+
+      const v = document.createElement('span');
+      v.className = 'v';
+      v.textContent = S.V[s].toFixed(3);
+      cell.appendChild(v);
+
+      // 목표 칸에는 화살표를 그리지 않는다 — 도달하면 에피소드가 끝난다
+      if (s !== GOAL) {
+        const a = shownArrow(s);
+        if (a !== null) {
+          const pi = document.createElement('span');
+          pi.className = 'pi' + (S.pi ? ' fixed' : '');
+          pi.textContent = ARROW[a];
+          cell.appendChild(pi);
+        }
+      }
+
+      cell.addEventListener('click', () => {
+        S.selected = (S.selected === s) ? null : s;
+        render();
+      });
+
+      grid.appendChild(cell);
+    }
+  }
+
+  document.getElementById('k').textContent = S.k;
+  document.getElementById('cursor').textContent = `${S.cursor} / ${ORDER.length}`;
+  document.getElementById('cursor-stat').style.display = S.grain === 'cell' ? '' : 'none';
+  document.getElementById('backups').textContent = S.backups;
+  document.getElementById('delta').textContent =
+    S.lastDelta === null ? '—' : S.lastDelta.toFixed(5);
+
+  const flag = document.getElementById('flag');
+  const btn = document.getElementById('step');
+  btn.classList.toggle('extract', S.phase === 'extract');
+  btn.disabled = S.phase === 'done';
+
+  if (S.phase === 'done') {
+    flag.textContent = `완료 — 스윕 ${S.k}회`;
+    flag.className = 'flag done';
+    btn.textContent = '최적 정책 완성';
+  } else if (S.phase === 'extract') {
+    flag.textContent = '수렴 (Δ < 0.001) — 탐욕화만 남음';
+    flag.className = 'flag extract';
+    btn.textContent = '마지막 탐욕화';
+  } else {
+    flag.textContent = S.k === 0 && S.cursor === 0 ? '시작 전' : '갱신 중';
+    flag.className = 'flag';
+    btn.textContent = S.grain === 'cell' ? '칸 하나 갱신' : '스윕 한 번';
+  }
+
+  document.getElementById('scale').textContent = `±${scale.toFixed(2)}`;
+  document.getElementById('arrow-note').innerHTML = S.pi
+    ? '화살표는 마지막에 한 번 탐욕화해 뽑은 <b>최적 정책</b>입니다 [식 4.12].'
+    : '흐린 화살표는 알고리즘이 들고 있는 정책이 아니라 <b>지금 V를 탐욕화해 본 결과</b>입니다. ' +
+      '가치 반복법은 도중에 정책을 유지하지 않습니다.';
+
+  renderChart();
+  renderBackup();
+  renderCompare();
+}
+
+/* 가로축은 스윕, 세로축은 Δ(로그 눈금).
+   임계값을 초록 파선으로, 겹쳐 보기를 켜면 정책 반복법 선을 회색으로 함께 그린다 */
+
+const CHART_H = 178;
+const M = { left: 64, right: 16, top: 16, bottom: 34 };
+
+function xTickStep(n) {
+  for (const s of [1, 2, 5, 10, 20, 25, 50, 100, 200, 500, 1000]) {
+    if (n / s <= 6) return s;
+  }
+  return 2000;
+}
+
+function renderChart() {
+  const box = document.getElementById('chart');
+  const h = S.history;
+  const ph = S.overlay ? PI.history : [];
+
+  const w = Math.max(280, box.clientWidth || 600);
+  const x0 = M.left, x1 = w - M.right, y0 = M.top, y1 = CHART_H - M.bottom;
+
+  const n = Math.max(h.length, ph.length);   // 가로축이 담을 스윕 수
+
+  // 세로 눈금은 10의 거듭제곱마다. Δ = 0 은 그릴 수 없으므로 바닥에 붙인다
+  const loE = Math.floor(Math.log10(THRESHOLD)) - 2;
+  const maxD = Math.max(THRESHOLD * 10, ...h, ...ph);
+  const hiE = Math.ceil(Math.log10(maxD));
+  const span = (hiE - loE) || 1;
+
+  const yOf = (d) => y1 - ((Math.log10(Math.max(d, Math.pow(10, loE))) - loE) / span) * (y1 - y0);
+  const xOf = (i) => x0 + (n > 1 ? (i / (n - 1)) * (x1 - x0) : 0);
+
+  const parts = [];
+
+  // 가로 격자와 세로축 눈금
+  for (let e = loE; e <= hiE; e++) {
+    const y = yOf(Math.pow(10, e)).toFixed(1);
+    const label = e >= 0 ? String(Math.pow(10, e)) : Math.pow(10, e).toFixed(-e);
+    parts.push(`<line class="gridline" x1="${x0}" y1="${y}" x2="${x1}" y2="${y}"/>`);
+    parts.push(`<line class="tick" x1="${x0 - 4}" y1="${y}" x2="${x0}" y2="${y}"/>`);
+    parts.push(`<text x="${x0 - 8}" y="${y}" text-anchor="end" dominant-baseline="middle">${label}</text>`);
+  }
+
+  // 가로축 눈금 — 스윕
+  if (n > 0) {
+    const step = xTickStep(n);
+    const ticks = [1];
+    for (let v = step; v <= n; v += step) if (v !== 1) ticks.push(v);
+    if (ticks[ticks.length - 1] !== n) {
+      if (n - ticks[ticks.length - 1] < step * 0.5) ticks.pop();
+      ticks.push(n);
+    }
+    for (const t of ticks) {
+      const x = xOf(t - 1).toFixed(1);
+      parts.push(`<line class="tick" x1="${x}" y1="${y1}" x2="${x}" y2="${y1 + 4}"/>`);
+      parts.push(`<text x="${x}" y="${y1 + 15}" text-anchor="middle">${t}</text>`);
+    }
+  }
+
+  // 임계값 파선
+  const thrY = yOf(THRESHOLD).toFixed(1);
+  parts.push(`<line class="thr" x1="${x0}" y1="${thrY}" x2="${x1}" y2="${thrY}"/>`);
+  parts.push(`<text class="thr-label" x="${x0 + 6}" y="${Number(thrY) - 5}">임계값 0.001</text>`);
+
+  // 정책 반복법 — 개선 지점의 점선과 Δ 선
+  if (ph.length > 1) {
+    for (const m of PI.marks) {
+      if (m < 1 || m >= ph.length) continue;
+      const x = ((xOf(m - 1) + xOf(m)) / 2).toFixed(1);
+      parts.push(`<line class="cyc" x1="${x}" y1="${y0}" x2="${x}" y2="${y1}"/>`);
+    }
+    const pts = ph.map((d, i) => `${xOf(i).toFixed(1)},${yOf(d).toFixed(1)}`).join(' ');
+    parts.push(`<polyline class="pi-line" points="${pts}"/>`);
+    const lx = xOf(ph.length - 1), ly = yOf(ph[ph.length - 1]);
+    parts.push(`<text class="pi-label" x="${(lx - 6).toFixed(1)}" y="${(ly - 8).toFixed(1)}" text-anchor="end">정책 반복법 ${ph.length}스윕</text>`);
+  }
+
+  // 가치 반복법
+  if (h.length > 1) {
+    const pts = h.map((d, i) => `${xOf(i).toFixed(1)},${yOf(d).toFixed(1)}`).join(' ');
+    parts.push(`<polyline class="line" points="${pts}"/>`);
+  }
+  if (h.length > 0 && h.length <= 60) {
+    for (let i = 0; i < h.length; i++) {
+      parts.push(`<circle class="dot" cx="${xOf(i).toFixed(1)}" cy="${yOf(h[i]).toFixed(1)}" r="2.6"/>`);
+    }
+  }
+  if (S.overlay && h.length > 1) {
+    const lx = xOf(h.length - 1), ly = yOf(h[h.length - 1]);
+    parts.push(`<text class="line-label" x="${(lx + 6).toFixed(1)}" y="${(ly + 4).toFixed(1)}">가치 반복법 ${h.length}스윕</text>`);
+  }
+  if (h.length === 0 && ph.length === 0) {
+    parts.push(`<text x="${((x0 + x1) / 2).toFixed(1)}" y="${((y0 + y1) / 2).toFixed(1)}" text-anchor="middle">갱신을 시작하면 여기에 그려집니다</text>`);
+  }
+
+  // 테두리와 축 이름
+  parts.push(`<rect class="frame" x="${x0}" y="${y0}" width="${x1 - x0}" height="${y1 - y0}"/>`);
+  parts.push(`<text class="axis-name" x="${((x0 + x1) / 2).toFixed(1)}" y="${CHART_H - 4}" text-anchor="middle">스윕</text>`);
+  parts.push(`<text class="axis-name" transform="rotate(-90 14 ${((y0 + y1) / 2).toFixed(1)})" x="14" y="${((y0 + y1) / 2).toFixed(1)}" text-anchor="middle" dominant-baseline="middle">Δ (로그 눈금)</text>`);
+
+  const svg =
+    `<svg viewBox="0 0 ${w} ${CHART_H}" width="${w}" height="${CHART_H}"
+          role="img" aria-label="스윕마다의 갱신폭 Δ 변화">${parts.join('')}</svg>`;
+
+  const cap = box.querySelector('figcaption');
+  box.innerHTML = '';
+  box.appendChild(cap);
+  box.insertAdjacentHTML('beforeend', svg);
+}
+
+/* 한 칸의 계산 — 같은 열을 max / argmax / Σπ 세 가지로 읽어 보인다 (그림 4-22) */
+function renderBackup() {
+  const box = document.getElementById('backup');
+  const s = S.selected || S.updated || null;   // 방금 계산한 칸을 기본으로 보여준다
+
+  if (!s) {
+    box.innerHTML =
+      '<h2>계산 들여다보기</h2>' +
+      '<p class="sub" style="margin:0">칸을 클릭하면 그 칸의 계산 과정이 여기 나옵니다.</p>';
+    return;
+  }
+
+  const [y, x] = parse(s);
+
+  if (s === GOAL) {
+    box.innerHTML =
+      `<h2>(${y}, ${x}) 목표 상태</h2>` +
+      '<p class="sub">갱신에서 예외</p>' +
+      '<p class="note" style="margin:0">목표 상태의 가치 함수는 언제나 0입니다. 도달하면 에피소드가 끝나므로 ' +
+      '이후에 받을 보상이 없고, 나갈 행동을 고를 일도 없습니다. ' +
+      '<code>value_iter_onestep()</code>이 <code>continue</code>로 건너뛰는 칸입니다.</p>';
+    return;
+  }
+
+  const terms = actionTerms(s, S.V, S.gamma);
+  const { best, tied } = bestOf(terms);
+  const maxQ = terms[best].q;
+  const mean = uniformValue(terms);
+
+  const rows = terms.map((t) => {
+    const [ny, nx] = parse(t.next);
+    return `<tr class="${t.a === best ? 'best' : ''}">
+      <td>${ACTION_NAME[t.a]}</td>
+      <td>(${ny}, ${nx})</td>
+      <td>${t.r.toFixed(0)}</td>
+      <td>${t.vNext.toFixed(4)}</td>
+      <td>${t.q.toFixed(4)}</td>
+    </tr>`;
+  }).join('');
+
+  box.innerHTML =
+    `<h2>(${y}, ${x})의 갱신</h2>` +
+    `<p class="sub">γ = ${S.gamma.toFixed(2)} · 지금 V로 행동값을 한 줄 뽑고, 그 열을 세 가지로 읽는다 · 제자리 갱신</p>` +
+    `<table class="terms">
+       <thead><tr>
+         <th>행동 a</th><th>다음 상태 s′</th><th>r</th><th>V(s′)</th><th>r + γV(s′)</th>
+       </tr></thead>
+       <tbody>${rows}</tbody>
+       <tfoot>
+         <tr class="r-max"><td colspan="4">max<sub>a</sub> → V(${y}, ${x}) <span class="eq">가치 반복법 [식 4.13]</span></td><td>${maxQ.toFixed(4)}</td></tr>
+         <tr class="r-arg"><td colspan="4">argmax<sub>a</sub> → π(${y}, ${x}) <span class="eq">정책 개선 [식 4.8]</span></td><td>${ARROW[best]}</td></tr>
+         <tr class="r-eval"><td colspan="4">Σ<sub>a</sub> π(a|s)(⋯) <span class="eq">무작위 정책의 정책 평가라면 [식 4.3]</span></td><td>${mean.toFixed(4)}</td></tr>
+       </tfoot>
+     </table>` +
+    `<p class="note" style="margin:12px 0 0">` +
+    `같은 열을 <b style="color:var(--fuse)">max</b>로 읽으면 가치, ` +
+    `<b style="color:var(--improve)">argmax</b>로 읽으면 방향입니다. ` +
+    `그림 4-22가 '같은 계산'이라고 말하는 그 부분이라 두 번 계산할 이유가 없습니다.` +
+    (tied ? ' · 최댓값이 동점이라 방향은 <code>argmax()</code> 규칙대로 <b>뒤에 나온 행동</b>을 골랐습니다. 값은 어느 쪽이든 같습니다.' : '') +
+    '</p>';
+}
+
+/* 같은 γ에서 두 알고리즘을 끝까지 돌려 나란히 놓는다 */
+function renderCompare() {
+  const same = ORDER.filter((s) => s !== GOAL).every((s) => VI.pi[s] === PI.pi[s]);
+  const perCycle = PI.perCycle.join(' · ');
+
+  document.getElementById('cmp-sub').textContent =
+    `γ = ${S.gamma.toFixed(2)} 에서 둘 다 끝까지 돌린 결과 (백업 = r + γV(s′) 한 번 계산)`;
+
+  document.getElementById('cmp').innerHTML =
+    `<table class="cmp">
+       <thead><tr><th></th><th class="vi">가치 반복법</th><th>정책 반복법</th></tr></thead>
+       <tbody>
+         <tr>
+           <th>구조</th>
+           <td class="vi">max 스윕 한 종류만</td>
+           <td>평가(여러 스윕) ↔ 개선</td>
+         </tr>
+         <tr>
+           <th>스윕 수</th>
+           <td class="vi"><b>${VI.sweeps}</b></td>
+           <td><b>${PI.sweeps}</b> <span style="color:var(--text-faint)">(사이클 ${PI.cycles}회 = ${perCycle})</span></td>
+         </tr>
+         <tr>
+           <th>백업 수</th>
+           <td class="vi"><b>${VI.backups}</b></td>
+           <td><b>${PI.backups}</b></td>
+         </tr>
+         <tr>
+           <th>중간 산출물</th>
+           <td class="vi">없음 — 중간 V는 어떤 정책의 가치도 아님</td>
+           <td>사이클마다의 정책 μ<sub>k</sub>. 중간에 멈춰도 쓸 수 있음</td>
+         </tr>
+         <tr>
+           <th>찾아낸 정책</th>
+           <td class="vi" colspan="2">${same
+             ? '<b style="color:var(--done)">두 답이 완전히 같음</b> — 그림 4-16 오른쪽과 그림 4-25의 화살표가 하나도 다르지 않다'
+             : '<b style="color:var(--minus)">다름</b> — 동점 처리로 갈린 것이지 값은 같다'}</td>
+         </tr>
+       </tbody>
+     </table>
+     <p class="note" style="margin:12px 0 0">
+       '사이클 ${PI.cycles}회'와 '스윕 ${VI.sweeps}회'는 <b>단위가 다릅니다</b> — 사이클 하나가 평가 스윕 여러 번을 품고 있어
+       같은 단위로 세야 ${PI.sweeps} 대 ${VI.sweeps}가 됩니다.
+       둘은 '평가를 얼마나 끝까지 돌리는가'라는 <b>같은 축의 양 끝</b>일 뿐이고,
+       그 사이를 <b>일반화된 정책 반복</b>(GPI)이라고 부릅니다.
+     </p>`;
+}
+
+/* ---------- 이벤트 ---------- */
+
+const gammaInput = document.getElementById('gamma');
+gammaInput.addEventListener('input', () => {
+  S.gamma = Number(gammaInput.value);
+  document.getElementById('gamma-val').textContent = S.gamma.toFixed(2);
+  recompute();
+  reset();  // 도중에 γ 를 바꾸면 헷갈리므로 처음부터 다시
+});
+
+function bindSeg(id, apply) {
+  const seg = document.getElementById(id);
+  seg.addEventListener('click', (e) => {
+    const btn = e.target.closest('button');
+    if (!btn) return;
+    for (const b of seg.querySelectorAll('button')) {
+      b.setAttribute('aria-pressed', String(b === btn));
+    }
+    apply(btn.dataset.v);
+  });
+}
+
+bindSeg('grain', (v) => { S.grain = v; render(); });
+bindSeg('overlay', (v) => { S.overlay = (v === 'on'); render(); });
+
+document.getElementById('step').addEventListener('click', step);
+document.getElementById('run').addEventListener('click', runToConvergence);
+document.getElementById('reset').addEventListener('click', reset);
+
+window.addEventListener('resize', () => renderChart());
+
+document.addEventListener('keydown', (e) => {
+  if (e.code !== 'Space') return;
+  const t = e.target;
+  if (t && (t.tagName === 'INPUT' || t.tagName === 'BUTTON')) return;  // 조작부에 포커스가 있으면 양보
+  e.preventDefault();
+  step();
+});
+
+recompute();
+reset();
+</script>
+</body>
+</html>
