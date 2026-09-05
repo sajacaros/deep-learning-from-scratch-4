@@ -384,7 +384,7 @@ button:hover { border-color: var(--accent); color: var(--accent); }
           <li>Δ가 0.001보다 작아지면 수렴으로 봅니다. 파이썬 코드의 <code>threshold</code>와 같은 값입니다.</li>
           <li>γ를 바꾸면 처음(V=0)부터 다시 시작합니다. γ가 클수록 먼 미래의 −1까지 값에 스며들어 전체가 아래로 내려가고, 수렴도 느려집니다.</li>
           <li>벽 칸은 갱신하지 않습니다. 파이썬 코드는 벽 칸의 값도 계산하지만 어떤 상태도 그 값을 읽지 않아 결과에 영향이 없습니다.</li>
-          <li><b>탐욕 방향</b>은 지금 V를 기준으로 <code>argmax<sub>a</sub> { r + γV(s′) }</code>를 그린 것입니다. 평가에는 쓰이지 않고, 4.2절 정책 개선의 미리보기입니다.
+          <li><b>탐욕 방향</b>은 지금 V를 기준으로 <code>argmax<sub>a</sub> { r + γV(s′) }</code>를 그린 것입니다. 평가에는 쓰이지 않고, 4.3.1절 정책 개선(구현은 4.4.1절의 <code>greedy_policy()</code>)의 미리보기입니다.
             최댓값이 동점인 칸은 방향이 정해지지 않은 것이므로 비워둡니다 — V가 모두 0인 처음에는 보상 차이가 있는 칸만 화살표가 뜨고, 스윕이 돌면서 하나씩 생겨납니다.</li>
         </ul>
       </div>
@@ -552,7 +552,7 @@ function heat(v, scale) {
 
 /* 최댓값이 하나뿐일 때만 방향을 돌려준다.
    동점이면 탐욕화가 방향을 정하지 못한 것이므로 null — 특히 V 가 모두 0 인 처음이 그렇다.
-   (common/utils.py 의 argmax() 는 이럴 때 무작위로 하나를 고른다) */
+   (s05_policy_iter.py 의 argmax() 는 이럴 때 마지막 키를 고른다) */
 function greedyAction(s, read) {
   const [y, x] = parse(s);
   const qs = [];
