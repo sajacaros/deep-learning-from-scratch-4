@@ -1,0 +1,836 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>무작위 정책의 가치 함수 — 반복적 정책 평가</title>
+<meta name="description" content="4장 반복적 정책 평가를 한 번에 한 스윕씩 눈으로 따라가는 그리드 월드 데모.">
+<style>
+/* 색과 기본 서식 — docs/style.css 에서 이 화면에 필요한 부분만 옮겨왔다 */
+:root {
+  --bg: #f7f8fa;
+  --surface: #ffffff;
+  --border: #e2e5ea;
+  --text: #1c2024;
+  --text-dim: #5c6570;
+  --text-faint: #8b939d;
+  --accent: #2f6bd8;
+  --accent-soft: #eaf0fc;
+  --answer-bg: #f2f7f1;
+  --done: #3f8f52;
+  --minus: #a63d5c;
+  --shadow: 0 1px 2px rgba(20, 25, 35, .06), 0 1px 8px rgba(20, 25, 35, .04);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #14171b;
+    --surface: #1c2025;
+    --border: #2e343b;
+    --text: #e6e9ec;
+    --text-dim: #a3acb6;
+    --text-faint: #78828d;
+    --accent: #7aa7f0;
+    --accent-soft: #212b3d;
+    --answer-bg: #1b2620;
+    --done: #6fbd82;
+    --minus: #e08fa8;
+    --shadow: 0 1px 2px rgba(0, 0, 0, .3), 0 1px 8px rgba(0, 0, 0, .2);
+  }
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo",
+    "Pretendard", "Malgun Gothic", "Noto Sans KR", sans-serif;
+  font-size: 16px;
+  line-height: 1.7;
+  -webkit-text-size-adjust: 100%;
+}
+
+.wrap { max-width: 860px; margin: 0 auto; padding: 32px 20px 80px; }
+
+a { color: var(--accent); }
+
+code {
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  font-size: .9em;
+  background: var(--accent-soft);
+  padding: .1em .35em;
+  border-radius: 4px;
+}
+
+.masthead { margin-bottom: 28px; }
+.masthead h1 { font-size: 1.65rem; margin: 0 0 6px; letter-spacing: -.02em; }
+.masthead p { margin: 0; color: var(--text-dim); font-size: .93rem; }
+
+button {
+  font: inherit;
+  font-size: .85rem;
+  padding: 5px 12px;
+  border-radius: 7px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text-dim);
+  cursor: pointer;
+  transition: border-color .15s, color .15s;
+}
+
+button:hover { border-color: var(--accent); color: var(--accent); }
+
+.footer {
+  margin-top: 56px;
+  padding-top: 20px;
+  border-top: 1px solid var(--border);
+  font-size: .8rem;
+  color: var(--text-faint);
+  line-height: 1.75;
+}
+.footer p { margin: 0 0 6px; }
+</style>
+<style>
+  .panel {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    box-shadow: var(--shadow);
+    padding: 16px 18px;
+    margin-bottom: 16px;
+  }
+
+  /* ---------- 조작부 ---------- */
+
+  .controls { display: flex; flex-wrap: wrap; align-items: center; gap: 14px 20px; }
+
+  .ctl { display: flex; align-items: center; gap: 8px; font-size: .86rem; color: var(--text-dim); }
+
+  .ctl input[type=range] { width: 160px; accent-color: var(--accent); }
+
+  .ctl .val {
+    font-variant-numeric: tabular-nums;
+    font-weight: 700;
+    color: var(--text);
+    min-width: 2.6em;
+  }
+
+  .seg { display: inline-flex; border: 1px solid var(--border); border-radius: 7px; overflow: hidden; }
+  .seg button { border: 0; border-radius: 0; padding: 5px 11px; }
+  .seg button + button { border-left: 1px solid var(--border); }
+  .seg button[aria-pressed="true"] { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+
+  .actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; align-items: center; }
+
+  button.primary {
+    font-size: .92rem;
+    font-weight: 600;
+    padding: 8px 18px;
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #fff;
+  }
+  button.primary:hover { background: var(--accent); color: #fff; filter: brightness(1.08); }
+
+  .hint { font-size: .78rem; color: var(--text-faint); margin-left: auto; }
+
+  /* ---------- 상태 표시 ---------- */
+
+  .stats { display: flex; flex-wrap: wrap; gap: 10px 26px; align-items: baseline; }
+
+  .stat .label { font-size: .74rem; color: var(--text-faint); display: block; letter-spacing: .03em; }
+  .stat .num { font-size: 1.15rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+
+  .flag {
+    font-size: .72rem;
+    font-weight: 700;
+    padding: 2px 9px;
+    border-radius: 20px;
+    background: var(--accent-soft);
+    color: var(--accent);
+  }
+  .flag.done { background: var(--answer-bg); color: var(--done); }
+
+  /* ---------- Δ 그래프 ---------- */
+
+  .chart { margin: 18px 0 0; }
+
+  .chart figcaption {
+    font-size: .78rem;
+    color: var(--text-faint);
+    margin-bottom: 8px;
+  }
+
+  .chart svg { display: block; width: 100%; }
+
+  .chart .frame { fill: none; stroke: var(--border); stroke-width: 1; }
+  .chart .gridline { stroke: var(--border); stroke-dasharray: 2 3; opacity: .8; }
+  .chart .tick { stroke: var(--border); }
+
+  .chart text {
+    fill: var(--text-faint);
+    font-size: 10.5px;
+    font-variant-numeric: tabular-nums;
+  }
+  .chart .axis-name { fill: var(--text-dim); }
+
+  .chart .thr { stroke: var(--done); stroke-width: 1.2; stroke-dasharray: 5 3; }
+  .chart .thr-label { fill: var(--done); font-weight: 600; }
+
+  .chart .line { fill: none; stroke: var(--accent); stroke-width: 1.7; stroke-linejoin: round; }
+  .chart .dot { fill: var(--accent); }
+
+  /* ---------- 그리드 ---------- */
+
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 8px;
+  }
+
+  .cell {
+    position: relative;
+    aspect-ratio: 1.25 / 1;
+    min-height: 74px;
+    border: 1px solid var(--border);
+    border-radius: 9px;
+    background-color: var(--surface);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+    cursor: pointer;
+    font: inherit;
+    color: var(--text);
+    padding: 4px;
+    transition: box-shadow .12s, border-color .12s;
+  }
+
+  .cell:hover { border-color: var(--accent); }
+
+  .cell .v {
+    font-size: 1.22rem;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: -.01em;
+  }
+
+  .cell .coord {
+    position: absolute;
+    top: 5px;
+    left: 7px;
+    font-size: .66rem;
+    color: var(--text-faint);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .cell .tag {
+    position: absolute;
+    top: 5px;
+    right: 7px;
+    font-size: .68rem;
+    font-weight: 700;
+  }
+  .cell .tag.plus { color: var(--done); }
+  .cell .tag.minus { color: var(--minus); }
+
+  .cell .arrow {
+    position: absolute;
+    bottom: 4px;
+    right: 8px;
+    font-size: .82rem;
+    color: var(--text-faint);
+  }
+
+  .cell.wall {
+    background-color: var(--border);
+    background-image: none;
+    cursor: default;
+    color: var(--text-faint);
+    font-size: .8rem;
+  }
+  .cell.wall:hover { border-color: var(--border); }
+
+  .cell.next { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft); }
+  .cell.selected { border-color: var(--text-dim); box-shadow: 0 0 0 2px var(--border); }
+
+  .legend {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: .76rem;
+    color: var(--text-faint);
+    margin-top: 12px;
+  }
+  .legend .bar {
+    flex: 1;
+    height: 8px;
+    border-radius: 4px;
+    background: linear-gradient(90deg,
+      rgba(190, 70, 80, .45), rgba(190, 70, 80, 0), rgba(47, 107, 216, 0), rgba(47, 107, 216, .45));
+  }
+
+  /* ---------- 백업 계산 ---------- */
+
+  .backup h2 { font-size: .95rem; margin: 0 0 4px; }
+  .backup .sub { font-size: .8rem; color: var(--text-faint); margin: 0 0 12px; }
+
+  table.terms { width: 100%; border-collapse: collapse; font-size: .84rem; font-variant-numeric: tabular-nums; }
+  table.terms th, table.terms td { padding: 5px 8px; border-bottom: 1px solid var(--border); text-align: right; }
+  table.terms th { color: var(--text-faint); font-weight: 600; font-size: .76rem; letter-spacing: .02em; }
+  table.terms th:first-child, table.terms td:first-child { text-align: left; }
+  table.terms tr:last-child td { border-bottom: 0; }
+  table.terms tfoot td { font-weight: 700; border-top: 2px solid var(--border); border-bottom: 0; }
+
+  .note { font-size: .84rem; color: var(--text-dim); }
+  .note code { font-size: .86em; }
+
+  details.about summary { cursor: pointer; font-size: .9rem; font-weight: 600; }
+  details.about > div { margin-top: 10px; font-size: .88rem; color: var(--text-dim); }
+  details.about ul { margin: 8px 0 0; padding-left: 20px; }
+  details.about li { margin-bottom: 5px; }
+
+  @media (max-width: 520px) {
+    .cell { min-height: 62px; }
+    .cell .v { font-size: 1rem; }
+    .ctl input[type=range] { width: 120px; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="masthead">
+    <h1>무작위 정책의 가치 함수</h1>
+    <p>4장 반복적 정책 평가 · <code>s04_policy_eval.py</code>의 계산을 한 번에 한 스윕씩</p>
+  </header>
+
+  <section class="panel">
+    <div class="controls">
+      <label class="ctl">
+        할인율 γ
+        <input id="gamma" type="range" min="0" max="0.99" step="0.01" value="0.9">
+        <span class="val" id="gamma-val">0.90</span>
+      </label>
+
+      <span class="ctl">
+        갱신 단위
+        <span class="seg" id="grain">
+          <button type="button" data-v="sweep" aria-pressed="true">한 스윕</button>
+          <button type="button" data-v="state" aria-pressed="false">한 상태</button>
+        </span>
+      </span>
+
+      <span class="ctl">
+        갱신 방식
+        <span class="seg" id="mode">
+          <button type="button" data-v="inplace" aria-pressed="true">제자리</button>
+          <button type="button" data-v="two" aria-pressed="false">배열 두 개</button>
+        </span>
+      </span>
+
+      <label class="ctl">
+        <input id="greedy" type="checkbox"> 탐욕 방향 표시
+      </label>
+    </div>
+
+    <div class="actions">
+      <button type="button" class="primary" id="step">다음 갱신</button>
+      <button type="button" id="run">수렴까지</button>
+      <button type="button" id="reset">초기화</button>
+      <span class="hint">스페이스바로도 갱신됩니다</span>
+    </div>
+  </section>
+
+  <section class="panel">
+    <div class="stats">
+      <span class="stat"><span class="label">스윕 k</span><span class="num" id="k">0</span></span>
+      <span class="stat"><span class="label">직전 갱신폭 Δ</span><span class="num" id="delta">—</span></span>
+      <span class="stat"><span class="label">상태</span><span class="flag" id="flag">시작 전</span></span>
+    </div>
+
+    <figure class="chart" id="chart">
+      <figcaption>스윕마다의 갱신폭 Δ와 임계값 0.001</figcaption>
+    </figure>
+  </section>
+
+  <section class="panel">
+    <div class="grid" id="grid"></div>
+    <div class="legend">
+      <span>낮음</span><span class="bar"></span><span>높음</span>
+      <span id="scale" style="margin-left:6px"></span>
+    </div>
+  </section>
+
+  <section class="panel backup" id="backup"></section>
+
+  <section class="panel">
+    <details class="about">
+      <summary>이 화면이 계산하는 것</summary>
+      <div>
+        <p style="margin:0">
+          정책은 네 방향을 각각 0.25로 고르는 무작위 정책이고, 상태 전이는 결정적입니다.
+          그래서 갱신식은 [식 4.3]의 형태가 됩니다.
+        </p>
+        <p style="margin:10px 0 0">
+          <code>V(s) ← Σ<sub>a</sub> π(a|s) { r(s, a, s′) + γ V(s′) }</code>
+        </p>
+        <ul>
+          <li><b>한 상태</b> 단위로 두면 스윕 안에서 상태 하나씩 갱신되는 모습을 볼 수 있습니다. 다음에 갱신될 칸이 파란 테두리로 표시됩니다.</li>
+          <li><b>제자리</b>(4.1.3)는 방금 갱신한 값을 같은 스윕 안에서 곧바로 다시 씁니다. <b>배열 두 개</b>(4.1.2)는 스윕이 끝날 때까지 이전 값만 읽습니다. 수렴하는 값은 같고 도달까지 걸리는 스윕 수만 달라집니다.</li>
+          <li>Δ가 0.001보다 작아지면 수렴으로 봅니다. 파이썬 코드의 <code>threshold</code>와 같은 값입니다.</li>
+          <li>γ를 바꾸면 처음(V=0)부터 다시 시작합니다. γ가 클수록 먼 미래의 −1까지 값에 스며들어 전체가 아래로 내려가고, 수렴도 느려집니다.</li>
+          <li>벽 칸은 갱신하지 않습니다. 파이썬 코드는 벽 칸의 값도 계산하지만 어떤 상태도 그 값을 읽지 않아 결과에 영향이 없습니다.</li>
+          <li><b>탐욕 방향</b>은 지금 V를 기준으로 <code>argmax<sub>a</sub> { r + γV(s′) }</code>를 그린 것입니다. 평가에는 쓰이지 않고, 4.2절 정책 개선의 미리보기입니다.</li>
+        </ul>
+      </div>
+    </details>
+  </section>
+
+  <footer class="footer">
+    <p>
+      예제 코드 저장소:
+      <a href="https://github.com/sajacaros/deep-learning-from-scratch-4" target="_blank" rel="noopener noreferrer">sajacaros/deep-learning-from-scratch-4</a>
+      · 원저작 코드
+      <a href="https://github.com/WegraLee/deep-learning-from-scratch-4" target="_blank" rel="noopener noreferrer">WegraLee/deep-learning-from-scratch-4</a>
+    </p>
+  </footer>
+
+</div>
+
+<script>
+/* 4장 반복적 정책 평가 — common/gridworld.py 의 그리드 월드를 그대로 옮겼다 */
+
+const H = 3, W = 4;
+const REWARD = [
+  [0, 0, 0, 1.0],
+  [0, null, 0, -1.0],
+  [0, 0, 0, 0],
+];
+const GOAL = '0,3';
+const WALL = '1,1';
+const MOVES = [[-1, 0], [1, 0], [0, -1], [0, 1]];
+const ARROW = ['↑', '↓', '←', '→'];
+const ACTION_NAME = ['UP ↑', 'DOWN ↓', 'LEFT ←', 'RIGHT →'];
+const PROB = 0.25;
+const THRESHOLD = 0.001;
+
+const key = (y, x) => y + ',' + x;
+const parse = (s) => s.split(',').map(Number);
+
+/* 갱신 순서: 행 우선. 벽은 건너뛴다 */
+const ORDER = [];
+for (let y = 0; y < H; y++) {
+  for (let x = 0; x < W; x++) {
+    if (key(y, x) !== WALL) ORDER.push(key(y, x));
+  }
+}
+
+function nextState(y, x, a) {
+  const ny = y + MOVES[a][0], nx = x + MOVES[a][1];
+  if (nx < 0 || nx >= W || ny < 0 || ny >= H) return [y, x];  // 테두리 밖이면 제자리
+  if (key(ny, nx) === WALL) return [y, x];                    // 벽이어도 제자리
+  return [ny, nx];
+}
+
+/* 상태 s 의 갱신값과 그 계산 과정을 함께 돌려준다 */
+function backup(s, read, gamma) {
+  const [y, x] = parse(s);
+  if (s === GOAL) return { value: 0, terms: null };
+
+  const terms = [];
+  let value = 0;
+  for (let a = 0; a < 4; a++) {
+    const [ny, nx] = nextState(y, x, a);
+    const r = REWARD[ny][nx];
+    const vNext = read[key(ny, nx)];
+    const contrib = PROB * (r + gamma * vNext);
+    value += contrib;
+    terms.push({ a, next: key(ny, nx), r, vNext, contrib });
+  }
+  return { value, terms };
+}
+
+/* ---------- 상태 ---------- */
+
+const S = {
+  gamma: 0.9,
+  grain: 'sweep',   // 'sweep' | 'state'
+  mode: 'inplace',  // 'inplace' | 'two'
+  greedy: false,
+  V: null,          // 확정된 가치 함수
+  work: null,       // 진행 중인 스윕이 써 나가는 배열 (제자리 모드에서는 V 와 같은 객체)
+  snapshot: null,   // 배열 두 개 모드에서 읽기용으로 고정된 배열
+  cursor: 0,        // 이번 스윕에서 다음에 갱신할 ORDER 인덱스
+  sweepDelta: 0,    // 이번 스윕에서 누적된 최대 갱신폭
+  k: 0,
+  history: [],      // 스윕마다의 Δ
+  converged: false,
+  selected: null,   // 백업 계산을 들여다보는 칸
+  lastUpdated: null,
+};
+
+function zeros() {
+  const v = {};
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) v[key(y, x)] = 0;
+  return v;
+}
+
+function beginSweep() {
+  S.snapshot = { ...S.V };
+  S.work = S.mode === 'inplace' ? S.V : { ...S.V };
+  S.sweepDelta = 0;
+  S.cursor = 0;
+}
+
+function reset() {
+  S.V = zeros();
+  S.k = 0;
+  S.history = [];
+  S.converged = false;
+  S.lastUpdated = null;
+  beginSweep();
+  render();
+}
+
+/* 상태 하나 갱신. 스윕이 끝났으면 true */
+function stepState() {
+  const s = ORDER[S.cursor];
+  const read = S.mode === 'inplace' ? S.work : S.snapshot;
+  const { value } = backup(s, read, S.gamma);
+
+  const diff = Math.abs(value - S.snapshot[s]);
+  if (diff > S.sweepDelta) S.sweepDelta = diff;
+
+  S.work[s] = value;
+  S.lastUpdated = s;
+  S.cursor++;
+
+  if (S.cursor >= ORDER.length) {
+    S.V = S.work;
+    S.k++;
+    S.history.push(S.sweepDelta);
+    S.converged = S.sweepDelta < THRESHOLD;
+    beginSweep();
+    return true;
+  }
+  return false;
+}
+
+function stepSweep() {
+  let guard = 0;
+  while (!stepState() && guard++ < 100) { /* 스윕 하나를 끝까지 */ }
+}
+
+function step() {
+  if (S.grain === 'sweep') stepSweep();
+  else stepState();
+  render();
+}
+
+function runToConvergence() {
+  if (S.cursor !== 0) stepSweep();          // 진행 중이던 스윕부터 마무리
+  let guard = 0;
+  while (!S.converged && guard++ < 2000) stepSweep();
+  render();
+}
+
+/* ---------- 그리기 ---------- */
+
+const grid = document.getElementById('grid');
+
+function heat(v, scale) {
+  if (scale < 1e-9) return 'transparent';
+  const t = Math.max(-1, Math.min(1, v / scale));
+  const a = (Math.abs(t) * 0.45).toFixed(3);
+  return t >= 0 ? `rgba(47, 107, 216, ${a})` : `rgba(190, 70, 80, ${a})`;
+}
+
+function greedyAction(s, read) {
+  const [y, x] = parse(s);
+  let best = -Infinity, bestA = 0;
+  for (let a = 0; a < 4; a++) {
+    const [ny, nx] = nextState(y, x, a);
+    const q = REWARD[ny][nx] + S.gamma * read[key(ny, nx)];
+    if (q > best + 1e-12) { best = q; bestA = a; }
+  }
+  return bestA;
+}
+
+function render() {
+  const shown = S.work;               // 진행 중인 스윕의 중간 상태까지 보여준다
+  const nextKey = ORDER[S.cursor];
+
+  let scale = 0;
+  for (const s of ORDER) scale = Math.max(scale, Math.abs(shown[s]));
+  scale = Math.max(scale, 0.05);
+
+  grid.innerHTML = '';
+  for (let y = 0; y < H; y++) {
+    for (let x = 0; x < W; x++) {
+      const s = key(y, x);
+      const cell = document.createElement('button');
+      cell.type = 'button';
+      cell.className = 'cell';
+
+      if (s === WALL) {
+        cell.classList.add('wall');
+        cell.disabled = true;
+        cell.textContent = '벽';
+        grid.appendChild(cell);
+        continue;
+      }
+
+      cell.style.backgroundImage =
+        `linear-gradient(${heat(shown[s], scale)}, ${heat(shown[s], scale)})`;
+
+      if (S.grain === 'state' && s === nextKey) cell.classList.add('next');
+      if (s === S.selected) cell.classList.add('selected');
+
+      const coord = document.createElement('span');
+      coord.className = 'coord';
+      coord.textContent = `(${y}, ${x})`;
+      cell.appendChild(coord);
+
+      const r = REWARD[y][x];
+      if (r) {
+        const tag = document.createElement('span');
+        tag.className = 'tag ' + (r > 0 ? 'plus' : 'minus');
+        tag.textContent = r > 0 ? '+1' : '−1';
+        cell.appendChild(tag);
+      }
+
+      const v = document.createElement('span');
+      v.className = 'v';
+      v.textContent = shown[s].toFixed(3);
+      cell.appendChild(v);
+
+      if (S.greedy && s !== GOAL) {
+        const ar = document.createElement('span');
+        ar.className = 'arrow';
+        ar.textContent = ARROW[greedyAction(s, shown)];
+        cell.appendChild(ar);
+      }
+
+      cell.addEventListener('click', () => {
+        S.selected = (S.selected === s) ? null : s;
+        render();
+      });
+
+      grid.appendChild(cell);
+    }
+  }
+
+  document.getElementById('k').textContent = S.k;
+  const last = S.history.length ? S.history[S.history.length - 1] : null;
+  document.getElementById('delta').textContent = last === null ? '—' : last.toFixed(5);
+
+  const flag = document.getElementById('flag');
+  if (S.converged) {
+    flag.textContent = '수렴 (Δ < 0.001)';
+    flag.className = 'flag done';
+  } else if (S.k === 0 && S.cursor === 0) {
+    flag.textContent = '시작 전';
+    flag.className = 'flag';
+  } else {
+    flag.textContent = S.grain === 'state'
+      ? `스윕 진행 중 ${S.cursor}/${ORDER.length}`
+      : '진행 중';
+    flag.className = 'flag';
+  }
+
+  document.getElementById('scale').textContent = `±${scale.toFixed(2)}`;
+  renderChart();
+  renderBackup(shown);
+}
+
+/* 가로축은 스윕 k, 세로축은 Δ(로그 눈금). 임계값 0.001 을 파선으로 함께 그린다 */
+
+const CHART_H = 168;
+const M = { left: 64, right: 16, top: 12, bottom: 34 };  // 축 이름이 들어갈 여백
+
+function xTickStep(n) {
+  for (const s of [1, 2, 5, 10, 20, 25, 50, 100, 200, 500]) {
+    if (n / s <= 6) return s;
+  }
+  return 1000;
+}
+
+function renderChart() {
+  const box = document.getElementById('chart');
+  const h = S.history;
+
+  const w = Math.max(280, box.clientWidth || 600);
+  const x0 = M.left, x1 = w - M.right, y0 = M.top, y1 = CHART_H - M.bottom;
+
+  // 세로 눈금은 10의 거듭제곱마다. 아래쪽은 임계값보다 한 자리 더 내려 잡는다
+  const loE = Math.floor(Math.log10(THRESHOLD)) - 1;
+  const maxD = Math.max(THRESHOLD * 10, ...h);
+  const hiE = Math.ceil(Math.log10(maxD));
+  const span = (hiE - loE) || 1;
+
+  const yOf = (d) => y1 - ((Math.log10(Math.max(d, Math.pow(10, loE))) - loE) / span) * (y1 - y0);
+  const xOf = (i) => x0 + (h.length > 1 ? (i / (h.length - 1)) * (x1 - x0) : 0);
+
+  const parts = [];
+
+  // 가로 격자와 세로축 눈금
+  for (let e = loE; e <= hiE; e++) {
+    const y = yOf(Math.pow(10, e)).toFixed(1);
+    const label = e >= 0 ? String(Math.pow(10, e)) : Math.pow(10, e).toFixed(-e);
+    parts.push(`<line class="gridline" x1="${x0}" y1="${y}" x2="${x1}" y2="${y}"/>`);
+    parts.push(`<line class="tick" x1="${x0 - 4}" y1="${y}" x2="${x0}" y2="${y}"/>`);
+    parts.push(`<text x="${x0 - 8}" y="${y}" text-anchor="end" dominant-baseline="middle">${label}</text>`);
+  }
+
+  // 가로축 눈금 — 스윕 번호
+  if (h.length > 0) {
+    const step = xTickStep(h.length);
+    const ticks = [1];
+    for (let v = step; v <= h.length; v += step) if (v !== 1) ticks.push(v);
+    if (ticks[ticks.length - 1] !== h.length) {
+      // 마지막 눈금이 끝 값과 겹칠 만큼 가까우면 버린다
+      if (h.length - ticks[ticks.length - 1] < step * 0.5) ticks.pop();
+      ticks.push(h.length);
+    }
+    for (const t of ticks) {
+      const x = xOf(t - 1).toFixed(1);
+      parts.push(`<line class="tick" x1="${x}" y1="${y1}" x2="${x}" y2="${y1 + 4}"/>`);
+      parts.push(`<text x="${x}" y="${y1 + 15}" text-anchor="middle">${t}</text>`);
+    }
+  }
+
+  // 임계값 파선
+  const thrY = yOf(THRESHOLD).toFixed(1);
+  parts.push(`<line class="thr" x1="${x0}" y1="${thrY}" x2="${x1}" y2="${thrY}"/>`);
+  parts.push(`<text class="thr-label" x="${x0 + 6}" y="${Number(thrY) - 5}">임계값 0.001</text>`);
+
+  // 데이터
+  if (h.length > 1) {
+    const pts = h.map((d, i) => `${xOf(i).toFixed(1)},${yOf(d).toFixed(1)}`).join(' ');
+    parts.push(`<polyline class="line" points="${pts}"/>`);
+  }
+  if (h.length > 0 && h.length <= 60) {
+    for (let i = 0; i < h.length; i++) {
+      parts.push(`<circle class="dot" cx="${xOf(i).toFixed(1)}" cy="${yOf(h[i]).toFixed(1)}" r="2.2"/>`);
+    }
+  }
+  if (h.length === 0) {
+    parts.push(`<text x="${((x0 + x1) / 2).toFixed(1)}" y="${((y0 + y1) / 2).toFixed(1)}" text-anchor="middle">갱신을 시작하면 여기에 그려집니다</text>`);
+  }
+
+  // 테두리와 축 이름
+  parts.push(`<rect class="frame" x="${x0}" y="${y0}" width="${x1 - x0}" height="${y1 - y0}"/>`);
+  parts.push(`<text class="axis-name" x="${((x0 + x1) / 2).toFixed(1)}" y="${CHART_H - 4}" text-anchor="middle">스윕 k</text>`);
+  parts.push(`<text class="axis-name" transform="rotate(-90 14 ${((y0 + y1) / 2).toFixed(1)})" x="14" y="${((y0 + y1) / 2).toFixed(1)}" text-anchor="middle" dominant-baseline="middle">Δ (로그 눈금)</text>`);
+
+  const svg =
+    `<svg viewBox="0 0 ${w} ${CHART_H}" width="${w}" height="${CHART_H}"
+          role="img" aria-label="스윕마다의 갱신폭 Δ 변화">${parts.join('')}</svg>`;
+
+  const cap = box.querySelector('figcaption');
+  box.innerHTML = '';
+  box.appendChild(cap);
+  box.insertAdjacentHTML('beforeend', svg);
+}
+
+function renderBackup(shown) {
+  const box = document.getElementById('backup');
+  const s = S.selected || S.lastUpdated;
+
+  if (!s) {
+    box.innerHTML =
+      '<h2>백업 계산</h2>' +
+      '<p class="sub" style="margin:0">갱신을 시작하거나 칸을 클릭하면 그 칸의 계산 과정이 여기 나옵니다.</p>';
+    return;
+  }
+
+  const [y, x] = parse(s);
+  const read = S.mode === 'inplace' ? shown : (S.cursor === 0 ? shown : S.snapshot);
+  const { value, terms } = backup(s, read, S.gamma);
+  const why = S.selected
+    ? '클릭한 칸 — 지금 값으로 계산하면'
+    : '방금 갱신한 칸';
+
+  if (!terms) {
+    box.innerHTML =
+      `<h2>(${y}, ${x}) 목표 상태</h2>` +
+      `<p class="sub">${why}</p>` +
+      '<p class="note" style="margin:0">목표 상태의 가치 함수는 언제나 0입니다. 도달하면 에피소드가 끝나므로 이후에 받을 보상이 없습니다.</p>';
+    return;
+  }
+
+  const rows = terms.map((t) => {
+    const [ny, nx] = parse(t.next);
+    return `<tr>
+      <td>${ACTION_NAME[t.a]}</td>
+      <td>(${ny}, ${nx})</td>
+      <td>${t.r.toFixed(0)}</td>
+      <td>${t.vNext.toFixed(4)}</td>
+      <td>${t.contrib.toFixed(4)}</td>
+    </tr>`;
+  }).join('');
+
+  box.innerHTML =
+    `<h2>(${y}, ${x})의 갱신</h2>` +
+    `<p class="sub">${why} · γ = ${S.gamma.toFixed(2)} · ` +
+    `읽는 배열: ${S.mode === 'inplace' ? '갱신 중인 값(제자리)' : '스윕 시작 시점의 값'}</p>` +
+    `<table class="terms">
+       <thead><tr>
+         <th>행동 a</th><th>다음 상태 s′</th><th>r</th><th>V(s′)</th><th>0.25(r + γV(s′))</th>
+       </tr></thead>
+       <tbody>${rows}</tbody>
+       <tfoot><tr><td colspan="4">합계 → V(${y}, ${x})</td><td>${value.toFixed(4)}</td></tr></tfoot>
+     </table>`;
+}
+
+/* ---------- 이벤트 ---------- */
+
+const gammaInput = document.getElementById('gamma');
+gammaInput.addEventListener('input', () => {
+  S.gamma = Number(gammaInput.value);
+  document.getElementById('gamma-val').textContent = S.gamma.toFixed(2);
+  reset();  // 도중에 γ 를 바꾸면 헷갈리므로 처음부터 다시
+});
+
+function bindSeg(id, apply) {
+  const seg = document.getElementById(id);
+  seg.addEventListener('click', (e) => {
+    const btn = e.target.closest('button');
+    if (!btn) return;
+    for (const b of seg.querySelectorAll('button')) {
+      b.setAttribute('aria-pressed', String(b === btn));
+    }
+    apply(btn.dataset.v);
+  });
+}
+
+bindSeg('grain', (v) => { S.grain = v; render(); });
+bindSeg('mode', (v) => { S.mode = v; reset(); });
+
+document.getElementById('greedy').addEventListener('change', (e) => {
+  S.greedy = e.target.checked;
+  render();
+});
+
+document.getElementById('step').addEventListener('click', step);
+document.getElementById('run').addEventListener('click', runToConvergence);
+document.getElementById('reset').addEventListener('click', reset);
+
+window.addEventListener('resize', () => renderChart());
+
+document.addEventListener('keydown', (e) => {
+  if (e.code !== 'Space') return;
+  const t = e.target;
+  if (t && (t.tagName === 'INPUT' || t.tagName === 'BUTTON')) return;  // 조작부에 포커스가 있으면 양보
+  e.preventDefault();
+  step();
+});
+
+reset();
+</script>
+</body>
+</html>
