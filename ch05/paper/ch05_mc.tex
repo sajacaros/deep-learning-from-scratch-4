@@ -80,6 +80,26 @@
 \newcommand{\bookfig}[1]{\textit{출처: 원서 그림 #1.}}
 \newcommand{\cmt}[1]{\textcolor{codecm}{#1}}   % 리스팅 안의 한글 주석
 
+% ---- 차례의 절 번호 폭 -------------------------------------------------------
+% \thesection 이 "5.1" 처럼 두 토막이라 article 기본 폭(1.5em)으로는 번호와 제목이
+% 붙어 버린다. 번호 상자를 넓혀 준다.
+\makeatletter
+\renewcommand*\l@section[2]{%
+  \ifnum \c@tocdepth >\z@
+    \addpenalty\@secpenalty
+    \addvspace{1.0em \@plus\p@}%
+    \setlength\@tempdima{2.8em}%
+    \begingroup
+      \parindent \z@ \rightskip \@pnumwidth
+      \parfillskip -\@pnumwidth
+      \leavevmode \bfseries
+      \advance\leftskip\@tempdima \hskip -\leftskip
+      #1\nobreak\hfil \nobreak\hb@xt@\@pnumwidth{\hss #2}\par
+    \endgroup
+  \fi}
+\renewcommand*\l@subsection{\@dottedtocline{2}{2.8em}{3.4em}}
+\makeatother
+
 % ---- 절 번호를 원서 5장 목차에 맞춤 -----------------------------------------
 % 번호 있는 절은 원서/README의 5.1~5.6과 정확히 대응한다. 서론과 재현 정보는
 % 번호를 붙이지 않고, 하위 절보다 깊은 제목은 번호와 차례에서 뺀다.
