@@ -168,10 +168,10 @@ $\alpha$는 잔차의 표준편차를 $\sqrt{\alpha/(2-\alpha)}\,\sigma_G$라는
 
 앞 장\cite{ch04}에서 벨만 방정식의 등호를 대입으로 바꿔 읽어 반복적 정책 평가, 정책 반복법, 가치
 반복법을 얻었다. 세 알고리즘의 갱신식은 모두
-\begin{equation}
+\begin{equation*}
   V_{k+1}(s) = \sum_{a} \pi(a\mid s) \sum_{s'} p(s'\mid s,a)
                \bigl\{\, r(s,a,s') + \gamma\, V_k(s') \,\bigr\}
-\end{equation}
+\end{equation*}
 의 모양이었고, 여기에는 $p$와 $r$가 그대로 들어 있다. 이 합을 계산하려면 ``어느 상태로 얼마의 확률로
 가는지''와 ``그때 얼마를 받는지''를 미리 알아야 한다. 앞 장의 예제가 \lstinline|env.next_state()|와
 \lstinline|env.reward()|를 부르는 자리가 정확히 그 지점이다.
@@ -182,10 +182,10 @@ $\alpha$는 잔차의 표준편차를 $\sqrt{\alpha/(2-\alpha)}\,\sigma_G$라는
 
 이 장이 바꾸는 것은 위 갱신식의 $\sum_{s'} p(s'\mid s,a)$ 하나다. 상태 가치 함수의 정의가 애초에
 기댓값이라는 데서 출발한다.
-\begin{equation}
+\begin{equation*}
   v_\pi(s) = \E_\pi\bigl[\, G_t \mid S_t = s \,\bigr],
   \qquad G_t = R_t + \gamma R_{t+1} + \gamma^2 R_{t+2} + \cdots
-\end{equation}
+\end{equation*}
 기댓값을 구하는 길은 둘이다. 분포를 알고 $\sum_x x\,p(x)$를 계산하거나, 표본을 여럿 뽑아 산술 평균을
 내거나. 앞 장이 앞의 길이고 이 장이 뒤의 길이다. 뒤의 길을 \emph{몬테카를로법}이라 하며, 그것이
 참값에 다가간다는 근거는 큰 수의 법칙이다.
@@ -308,9 +308,9 @@ for _ in range(trial):
 $1{,}000$번 시행하면 $6.92$ 근처가 나온다. 참값 $7$에 가깝지만 정확히 $7$은 아니고, 실행할 때마다
 다르다. 이 어긋남의 크기는 미리 계산할 수 있다. 주사위 하나의 분산이 $35/12$이므로 두 개의 합은
 $\sigma^2 = 35/6$, $\sigma = 2.4152$다. 표본 평균의 표준오차는
-\begin{equation}
+\begin{equation*}
   \mathrm{SE}(n) = \frac{\sigma}{\sqrt{n}}
-\end{equation}
+\end{equation*}
 이므로 $n=1000$에서 $0.0764$다. 관측된 어긋남 $0.084$는 그 $1.1$배로, 표본 평균이 통상적으로 흔들리는
 폭 안에 있다. $\sigma/\sqrt{n}$이라는 이 모양에서 이 장 전체를 관통하는 사실 하나가 따라 나온다. \emph{오차를 열 배
 줄이려면 시행을 백 배 늘려야 한다.} 이 느림이 뒤에서 다시 문제가 된다.
@@ -395,9 +395,9 @@ $G$를 계산하는 것이다.
 \end{figure}
 
 $n$번 해보고 얻은 수익 $G^{(1)},\dots,G^{(n)}$의 평균이 추정치다.
-\begin{equation}
+\begin{equation*}
   V_\pi(s) = \frac{G^{(1)} + G^{(2)} + \cdots + G^{(n)}}{n} \;\xrightarrow[n\to\infty]{}\; v_\pi(s).
-\end{equation}
+\end{equation*}
 여기서 짚어야 할 것은 위 평균에 $p$도 $r$도 나오지 않는다는 사실이다. 필요한 것은
 행동을 넣으면 보상과 다음 상태를 돌려주는 샘플 모델뿐이다. 앞 장과 이 장을 가르는 선이 바로 여기다.
 
@@ -441,9 +441,9 @@ $n$번 해보고 얻은 수익 $G^{(1)},\dots,G^{(n)}$의 평균이 추정치다
 
 $A$의 수익이 $G_A = R_0 + \gamma R_1 + \gamma^2 R_2$일 때 $B$의 수익 $G_B = R_1 + \gamma R_2$는 같은
 경험 안에 이미 들어 있다. 게다가 이 셋은 뒤에서부터 계산하면 서로를 재사용한다.
-\begin{equation}
+\begin{equation*}
   G_C = R_2, \qquad G_B = R_1 + \gamma\,G_C, \qquad G_A = R_0 + \gamma\,G_B.
-\end{equation}
+\end{equation*}
 3장에서 얻은 재귀 구조 $G_t = R_t + \gamma G_{t+1}$을 그대로 쓴 것이다. 앞에서부터 계산하면 상태마다
 뒤쪽 보상을 다시 훑어야 하므로 길이 $T$인 에피소드에 $O(T^2)$이 들지만, 뒤에서부터 계산하면
 $O(T)$다. 이것이 코드에서 \lstinline|reversed(self.memory)| 한 마디로 나타난다.
@@ -700,19 +700,19 @@ $22$회를 더 쓰면 되지만 MC법은 지금까지 쓴 것의 백 배를 더 
 
 지금까지는 주어진 정책을 평가하기만 했다. 앞 장에서 그랬듯 여기에 개선을 붙여 최적 정책을 찾는다.
 개선은 탐욕화이고, 탐욕화를 쓰는 방법은 둘이다.
-\begin{align}
+\begin{align*}
   \mu(s) &= \arg\max_{a} Q(s,a), \\
   \mu(s) &= \arg\max_{a} \sum_{s'} p(s'\mid s,a)\bigl\{\,r(s,a,s') + \gamma V(s')\,\bigr\}.
-\end{align}
+\end{align*}
 앞 장이 쓴 것은 아래쪽, 곧 $p$와 $r$가 들어 있는 쪽이었다. 모델을 모르는
 이 장에서는 쓸 수 없다.
 
 남는 것은 $\arg\max_a Q(s,a)$뿐이고, 그 대가로 평가의 대상이 바뀐다. $V$가 아니라 $Q$를 추정해야
 한다. 3.3.1절에서 ``$Q$를 쓰면 모델 없이 탐욕화할 수 있다''고 예고한 것이 여기서 결정적으로 작용한다.
 갱신식은 저장 단위가 상태에서 (상태, 행동) 쌍으로 바뀔 뿐 계산은 그대로다.
-\begin{equation}
+\begin{equation*}
   Q_n(s,a) = Q_{n-1}(s,a) + \frac{1}{n}\bigl\{\,G^{(n)} - Q_{n-1}(s,a)\,\bigr\}.
-\end{equation}
+\end{equation*}
 비용은 커진다. 표의 칸이 $|\Sset|$개에서 $|\Sset||\Aset|$개로 늘고, 표본도 상태마다가 아니라
 (상태, 행동) 쌍마다 모아야 한다. 이 환경에서는 $10$칸이 $40$칸이 된다.
 
@@ -786,9 +786,9 @@ def greedy_probs(Q, state, epsilon=0, action_size=4):
 \end{figure}
 
 갱신식을 지수 이동 평균으로 바꾼다.
-\begin{equation}
+\begin{equation*}
   Q(s,a) \;\leftarrow\; Q(s,a) + \alpha\bigl\{\,G - Q(s,a)\,\bigr\}.
-\end{equation}
+\end{equation*}
 $n$번째 표본이 최종 값에 기여하는 비중이 $\alpha(1-\alpha)^{\,\text{그 뒤 표본 수}}$로 지수적으로
 줄어들므로 오래된 정책의 성적은 저절로 잊힌다. 부수적으로 방문 횟수 \lstinline|cnts|를 들고 다닐
 필요가 없어져 코드도 짧아진다.
@@ -1029,11 +1029,11 @@ $\varepsilon$-탐욕 정책이다. 앞에서 \lstinline|greedy_probs()|에
 
 구하려는 것은 $\E_\pi[x] = \sum_x x\,\pi(x)$인데 손에 있는 표본은 $b$에서 나온 것이다. 합에
 $b(x)/b(x)$를 곱해 넣는 것으로 끝난다.
-\begin{equation}
+\begin{equation*}
   \E_\pi[x] = \sum_x x\,\pi(x)
             = \sum_x x\,\frac{\pi(x)}{b(x)}\,b(x)
             = \E_b\!\left[\, x\,\frac{\pi(x)}{b(x)} \,\right].
-\end{equation}
+\end{equation*}
 곱하고 나눈 것뿐이라 등호는 어디서도 깨지지 않는다. 마지막 항은 $b$에 대한 기댓값이므로 $b$로 뽑은
 표본으로 계산할 수 있다. $b$로 뽑되 값에 $\rho = \pi(x)/b(x)$를 곱해 평균을 내면 $\pi$의 기댓값이
 나온다. 이 가중치를 \emph{중요도 가중치}(importance weight), 기법 전체를 \emph{중요도
@@ -1144,9 +1144,9 @@ $\varepsilon$가 실무의 절충이다.
 
 $\rho = \pi(x)/b(x)$는 확률 변수 하나에 대한 것이었다. 에피소드는 걸음이 여럿이고 각 걸음마다 행동을
 고르므로, 수익 $G_t$의 가중치는 그 뒤 모든 걸음의 가중치를 곱한 것이 된다.
-\begin{equation}
+\begin{equation*}
   \rho_{t} = \prod_{k=t}^{T-1} \frac{\pi(A_k \mid S_k)}{b(A_k \mid S_k)}.
-\end{equation}
+\end{equation*}
 구현은 에피소드를 뒤에서부터 훑는 순서를 그대로 쓰면서 $\rho$를 곱해
 쌓는 것으로 끝난다.
 
@@ -1319,13 +1319,10 @@ MC법이 남긴 문제는 갱신의 시점에 있다. 에피소드가 끝나야 
 
 \begin{figure}[htbp]
 \centering
-\begin{minipage}{0.9\linewidth}
 \small
-\[
+$\displaystyle
   \underbrace{s_0}_{G_0} \to \underbrace{s_1}_{G_1} \to \underbrace{\mathbf{s}}_{G_2}
-  \to \underbrace{s_3}_{G_3} \to \underbrace{\mathbf{s}}_{G_4} \to \cdots \to \text{종료}
-\]
-\end{minipage}
+  \to \underbrace{s_3}_{G_3} \to \underbrace{\mathbf{s}}_{G_4} \to \cdots \to \text{종료}$
 \caption{한 에피소드 안에서 상태 $s$를 두 번 지나는 경우. \emph{모든 방문} 방식은 $G_2$와 $G_4$를 둘 다
 표본으로 삼고, \emph{첫 방문} 방식은 $G_2$만 삼는다.}
 \label{fig:revisit}
@@ -1459,10 +1456,10 @@ $(1,3)$ & $1$ & $1.189$ & $0.0423$ & 폭탄 칸, 가장 큰 오차 \\
 $d$로는 설명되지 않으며 오히려 반대 방향이다. 설명하는 것은 $\sigma_G$다. 여기에 부록
 \ref{app:first-every}의 ``효과적인 표본 수는 방문 횟수가 아니라 에피소드 수''를 붙이면 상태별 오차의
 크기를 예측하는 식이 완성된다.
-\begin{equation}
+\begin{equation*}
   \mathrm{RMSE}\bigl(V(s)\bigr) \;\approx\; \frac{\sigma_G(s)}{\sqrt{m(s)}},
   \qquad m(s)=\text{$s$를 지난 에피소드의 수}
-\end{equation}
+\end{equation*}
 표~\ref{tab:eff-n}에서 이 예측이 첫 방문 방식과 평균 $0.94$배, 모든 방문 방식과 $0.85$배로 맞는다.
 표~\ref{tab:mc-vs-dp}의 한 판 실행에서 $(1,2)$의 차이가 가장 컸던 것도, $(1,3)$이 방문이 가장
 적은데도 잘 맞았던 것도 우연이며, 시드를 $300$개 모아 평균하면 이 순서로 정렬된다.
@@ -1508,9 +1505,9 @@ $\alpha = 0.01$   & $0.07616$ & $0.04820$ & $1.58$ & $0.07836$ \\
 \paragraph{정상 상태의 분산.}
 갱신식 $Q \leftarrow Q + \alpha(G-Q)$를 $Q \leftarrow (1-\alpha)Q + \alpha G$로 고쳐 쓰고 $G$들이
 서로 독립이며 분산이 $\sigma_G^2$라 두면, 정상 상태에서의 분산은
-\begin{equation}
+\begin{equation*}
   \mathrm{Var}[Q_\infty] = \frac{\alpha}{2-\alpha}\,\sigma_G^2
-\end{equation}
+\end{equation*}
 이다. 이 값은 $n$과 무관하며, 여기서 폭 $\sqrt{\alpha/(2-\alpha)}\,\sigma_G$의 띠와 유효 표본 수
 $n_{\text{eff}} = (2-\alpha)/\alpha$가 나온다.
 
@@ -1570,14 +1567,14 @@ $250$배가 벌어지고, 칸별 치우침도 $(0,2)$의 $-0.0000$부터 $(2,3)$
 $0$을 준다. 행동 정책은 $\varepsilon=0.1$이므로 탐욕 행동에 $\varepsilon/4 + (1-\varepsilon) =
 0.925$, 나머지에 $\varepsilon/4 = 0.025$를 준다. 한 걸음의 가중치 $\pi(a\mid s)/b(a\mid s)$가 가질
 수 있는 값이 그 조합으로 정해진다.
-\begin{equation}
+\begin{equation*}
   \frac{\pi(a\mid s)}{b(a\mid s)} =
   \begin{cases}
     0                        & a \neq \text{$\pi$의 탐욕 행동} \quad (\text{네 번 중 세 번}),\\[2pt]
     1/0.925 = 1.081          & a = \text{$\pi$와 $b$의 탐욕 행동이 같을 때},\\[2pt]
     1/0.025 = 40             & a = \text{$\pi$의 탐욕 행동이지만 $b$의 것과 다를 때}.
   \end{cases}
-\end{equation}
+\end{equation*}
 
 세 번째 줄이 생기는 자리가 동점 처리다. \lstinline|update()|는 \lstinline|greedy_probs()|를 $\pi$용과
 $b$용으로 두 번 부르는데, 함수 안의 \lstinline|argmax()|는 동점이면 무작위로 하나를 고른다. 두 번의
