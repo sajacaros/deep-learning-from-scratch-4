@@ -735,8 +735,8 @@ $Q$의 증분 평균과 $\arg\max_a Q(s,a)$를 그대로 번갈아 쓰면 문제
 \begin{figure}[htbp]
 \centering
 \includegraphics[width=0.42\linewidth]{{fig 5-15}.png}
-\caption{$\varepsilon$-탐욕 정책이 각 행동에 주는 확률. 막대 네 개의 바닥이 모두
-$\varepsilon/4$로 떠 있고 최선의 행동만 $1-\varepsilon$만큼 더 높다. 확률이 $0$인 행동이 없으므로
+\caption{$\varepsilon$-탐욕 정책이 각 행동에 주는 확률. 막대 네 개가 모두 $\varepsilon/4$
+이상이고, 최선의 행동만 거기서 $1-\varepsilon$만큼 더 높다. 확률이 $0$인 행동이 없으므로
 모든 (상태, 행동) 쌍이 언젠가는 시도된다. \bookfig{5-15}}
 \label{fig:eps-greedy}
 \end{figure}
@@ -859,8 +859,8 @@ $50$개 시드 $\times$ $10$칸 $=500$개 값 전부에서 그렇다. 이 치우
 $(2,1)$이 \texttt{LEFT}인 것은 실제로 틀렸다. 참값이 \texttt{RIGHT} $0.7290$, \texttt{LEFT} $0.5905$로
 차이가 뚜렷한데도 어긋난 것이며, 목표에서 멀어 방문이 적은 탓이다.
 
-\subsubsection{[보충] 고정값 \texorpdfstring{$\alpha$}{alpha}가 남기는 바닥}
-\label{sec:alpha-floor}
+\subsubsection{[보충] 고정값 \texorpdfstring{$\alpha$}{alpha}는 오차를 끝까지 줄이지 못한다}
+\label{sec:alpha-residual}
 
 $1/n$ 평균을 고정값 $\alpha$로 바꾼 것은 공짜가 아니다. $1/n$ 평균은 $n$이 커지면 새 표본의 발언권이
 $1/n$로 줄어들어 추정치가 한 점으로 굳는다. 고정값 $\alpha$는 그렇지 않다. 표본이 몇 개 쌓였든 새로
@@ -1244,8 +1244,8 @@ $40$배가 섞여 들어오니 값의 추정은 흔들린다.
         에는 모델이 들어 있어 쓸 수 없고, $\arg\max_a Q(s,a)$만 남는다. 표의 칸이 $10$개에서
         $40$개로 늘어나는 것을 대가로 치른다.
   \item \textbf{탐욕 정책만으로는 학습이 멈춘다.} 결정적 정책은 언제나 같은 길을 걸으므로 나머지
-        칸의 $Q$가 갱신되지 않는다. $\varepsilon$-탐욕 정책이 모든 행동에 $\varepsilon/4$의 바닥을
-        깔아 준다.
+        칸의 $Q$가 갱신되지 않는다. $\varepsilon$-탐욕 정책은 모든 행동의 확률을
+        적어도 $\varepsilon/4$로 남겨 둔다.
   \item \textbf{정책이 계속 바뀌므로 오래된 표본은 잊어야 한다.} $1/n$ 평균 대신 고정값 $\alpha$를
         쓴다. 추정치가 한 점으로 모이지 않고 폭 $\sqrt{\alpha/(2-\alpha)}\,\sigma_G$의 띠 안에서
         흔들리는 것이 잊는 능력의 값이다.
@@ -1469,7 +1469,7 @@ $10^{5}$ 부근이다. 오른쪽: 상태별 오차를 두 가지 예측과 견�
 \subsection{고정값 \texorpdfstring{$\alpha$}{alpha}가 남기는 잔차}
 \label{app:alpha}
 
-본문의 [보충] ``고정값 $\alpha$가 남기는 바닥''이 쓴 근거다. 제어를 잠시 밀어 두고 무작위 정책 평가를
+본문의 [보충] ``고정값 $\alpha$는 오차를 끝까지 줄이지 못한다''가 쓴 근거다. 제어를 잠시 밀어 두고 무작위 정책 평가를
 두 방식으로 $100{,}000$ 에피소드씩 돌린다. 평가할 정책이 고정되어 있으므로 $\alpha$를 쓸 이유가
 전혀 없는 상황이며, 그래서 차이가 순수하게 드러난다.
 
