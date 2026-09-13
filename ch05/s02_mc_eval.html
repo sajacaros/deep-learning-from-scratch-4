@@ -1,0 +1,971 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>직접 걸어서 얻은 가치 함수 — 몬테카를로법 정책 평가</title>
+<meta name="description" content="5장 몬테카를로법을 한 걸음·한 에피소드씩 직접 걸어보며 표본 평균이 참값으로 다가가는 과정을 보는 그리드 월드 데모.">
+<style>
+/* 색과 기본 서식 — docs/style.css 에서 이 화면에 필요한 부분만 옮겨왔다 */
+:root {
+  --bg: #f7f8fa;
+  --surface: #ffffff;
+  --border: #e2e5ea;
+  --text: #1c2024;
+  --text-dim: #5c6570;
+  --text-faint: #8b939d;
+  --accent: #2f6bd8;
+  --accent-soft: #eaf0fc;
+  --answer-bg: #f2f7f1;
+  --done: #3f8f52;
+  --minus: #a63d5c;
+  --shadow: 0 1px 2px rgba(20, 25, 35, .06), 0 1px 8px rgba(20, 25, 35, .04);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #14171b;
+    --surface: #1c2025;
+    --border: #2e343b;
+    --text: #e6e9ec;
+    --text-dim: #a3acb6;
+    --text-faint: #78828d;
+    --accent: #7aa7f0;
+    --accent-soft: #212b3d;
+    --answer-bg: #1b2620;
+    --done: #6fbd82;
+    --minus: #e08fa8;
+    --shadow: 0 1px 2px rgba(0, 0, 0, .3), 0 1px 8px rgba(0, 0, 0, .2);
+  }
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo",
+    "Pretendard", "Malgun Gothic", "Noto Sans KR", sans-serif;
+  font-size: 16px;
+  line-height: 1.7;
+  -webkit-text-size-adjust: 100%;
+}
+
+.wrap { max-width: 860px; margin: 0 auto; padding: 32px 20px 80px; }
+
+a { color: var(--accent); }
+
+code {
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  font-size: .9em;
+  background: var(--accent-soft);
+  padding: .1em .35em;
+  border-radius: 4px;
+}
+
+.masthead { margin-bottom: 28px; }
+.masthead h1 { font-size: 1.65rem; margin: 0 0 6px; letter-spacing: -.02em; }
+.masthead p { margin: 0; color: var(--text-dim); font-size: .93rem; }
+
+button {
+  font: inherit;
+  font-size: .85rem;
+  padding: 5px 12px;
+  border-radius: 7px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text-dim);
+  cursor: pointer;
+  transition: border-color .15s, color .15s;
+}
+
+button:hover { border-color: var(--accent); color: var(--accent); }
+
+.footer {
+  margin-top: 56px;
+  padding-top: 20px;
+  border-top: 1px solid var(--border);
+  font-size: .8rem;
+  color: var(--text-faint);
+  line-height: 1.75;
+}
+.footer p { margin: 0 0 6px; }
+</style>
+<style>
+  .panel {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    box-shadow: var(--shadow);
+    padding: 16px 18px;
+    margin-bottom: 16px;
+  }
+
+  /* ---------- 조작부 ---------- */
+
+  .controls { display: flex; flex-wrap: wrap; align-items: center; gap: 14px 20px; }
+
+  .ctl { display: flex; align-items: center; gap: 8px; font-size: .86rem; color: var(--text-dim); }
+
+  .ctl input[type=range] { width: 150px; accent-color: var(--accent); }
+  .ctl.off { opacity: .4; }
+
+  .ctl .val {
+    font-variant-numeric: tabular-nums;
+    font-weight: 700;
+    color: var(--text);
+    min-width: 2.6em;
+  }
+
+  .seg { display: inline-flex; border: 1px solid var(--border); border-radius: 7px; overflow: hidden; }
+  .seg button { border: 0; border-radius: 0; padding: 5px 11px; }
+  .seg button + button { border-left: 1px solid var(--border); }
+  .seg button[aria-pressed="true"] { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+
+  .actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; align-items: center; }
+
+  button.primary {
+    font-size: .92rem;
+    font-weight: 600;
+    padding: 8px 18px;
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #fff;
+  }
+  button.primary:hover { background: var(--accent); color: #fff; filter: brightness(1.08); }
+
+  .hint { font-size: .78rem; color: var(--text-faint); margin-left: auto; }
+
+  /* ---------- 상태 표시 ---------- */
+
+  .stats { display: flex; flex-wrap: wrap; gap: 10px 26px; align-items: baseline; }
+
+  .stat .label { font-size: .74rem; color: var(--text-faint); display: block; letter-spacing: .03em; }
+  .stat .num { font-size: 1.15rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+
+  .flag {
+    font-size: .72rem;
+    font-weight: 700;
+    padding: 2px 9px;
+    border-radius: 20px;
+    background: var(--accent-soft);
+    color: var(--accent);
+  }
+  .flag.done { background: var(--answer-bg); color: var(--done); }
+
+  /* ---------- 오차 그래프 ---------- */
+
+  .chart { margin: 18px 0 0; }
+
+  .chart figcaption { font-size: .78rem; color: var(--text-faint); margin-bottom: 8px; }
+
+  .chart svg { display: block; width: 100%; }
+
+  .chart .frame { fill: none; stroke: var(--border); stroke-width: 1; }
+  .chart .gridline { stroke: var(--border); stroke-dasharray: 2 3; opacity: .8; }
+  .chart .tick { stroke: var(--border); }
+
+  .chart text {
+    fill: var(--text-faint);
+    font-size: 10.5px;
+    font-variant-numeric: tabular-nums;
+  }
+  .chart .axis-name { fill: var(--text-dim); }
+
+  .chart .dp { stroke: var(--minus); stroke-width: 1.2; stroke-dasharray: 5 3; }
+  .chart .dp-label { fill: var(--minus); font-weight: 600; }
+  .chart .guide { fill: none; stroke: var(--text-faint); stroke-width: 1; stroke-dasharray: 2 3; }
+  .chart .guide-label { fill: var(--text-faint); }
+
+  .chart .line { fill: none; stroke: var(--accent); stroke-width: 1.7; stroke-linejoin: round; }
+  .chart .dot { fill: var(--accent); }
+
+  /* ---------- 그리드 ---------- */
+
+  .grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+
+  .cell {
+    position: relative;
+    aspect-ratio: 1.25 / 1;
+    min-height: 78px;
+    border: 1px solid var(--border);
+    border-radius: 9px;
+    background-color: var(--surface);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0;
+    color: var(--text);
+    padding: 4px;
+  }
+
+  .cell .v {
+    font-size: 1.2rem;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: -.01em;
+  }
+
+  .cell .cnt {
+    font-size: .68rem;
+    color: var(--text-faint);
+    font-variant-numeric: tabular-nums;
+    line-height: 1.3;
+  }
+
+  .cell .coord {
+    position: absolute;
+    top: 5px;
+    left: 7px;
+    font-size: .66rem;
+    color: var(--text-faint);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .cell .tag { position: absolute; top: 5px; right: 7px; font-size: .68rem; font-weight: 700; }
+  .cell .tag.plus { color: var(--done); }
+  .cell .tag.minus { color: var(--minus); }
+
+  .cell .badge {
+    position: absolute;
+    bottom: 4px;
+    right: 7px;
+    font-size: .66rem;
+    color: var(--accent);
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .cell.wall {
+    background-color: var(--border);
+    background-image: none;
+    color: var(--text-faint);
+    font-size: .8rem;
+  }
+
+  .cell.onpath { border-color: var(--accent); border-style: dashed; }
+  .cell.here { border-color: var(--accent); border-style: solid; box-shadow: 0 0 0 2px var(--accent-soft); }
+
+  .cell .agent {
+    position: absolute;
+    bottom: 4px;
+    left: 7px;
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    background: var(--accent);
+  }
+
+  .legend {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: .76rem;
+    color: var(--text-faint);
+    margin-top: 12px;
+  }
+  .legend .bar {
+    flex: 1;
+    height: 8px;
+    border-radius: 4px;
+    background: linear-gradient(90deg,
+      rgba(190, 70, 80, .45), rgba(190, 70, 80, 0), rgba(47, 107, 216, 0), rgba(47, 107, 216, .45));
+  }
+
+  /* ---------- 되짚기 표 ---------- */
+
+  .replay h2 { font-size: .95rem; margin: 0 0 4px; }
+  .replay .sub { font-size: .8rem; color: var(--text-faint); margin: 0 0 12px; }
+
+  table.terms { width: 100%; border-collapse: collapse; font-size: .84rem; font-variant-numeric: tabular-nums; }
+  table.terms th, table.terms td { padding: 5px 8px; border-bottom: 1px solid var(--border); text-align: right; }
+  table.terms th { color: var(--text-faint); font-weight: 600; font-size: .76rem; letter-spacing: .02em; }
+  table.terms th:first-child, table.terms td:first-child { text-align: left; }
+  table.terms tr:last-child td { border-bottom: 0; }
+  table.terms tr.skip td { color: var(--text-faint); }
+  table.terms td .arrow { color: var(--text-faint); padding: 0 3px; }
+  table.terms tr.head-sep td { border-bottom: 2px solid var(--border); }
+
+  .note { font-size: .84rem; color: var(--text-dim); margin: 10px 0 0; }
+  .note code { font-size: .86em; }
+
+  details.about summary { cursor: pointer; font-size: .9rem; font-weight: 600; }
+  details.about > div { margin-top: 10px; font-size: .88rem; color: var(--text-dim); }
+  details.about ul { margin: 8px 0 0; padding-left: 20px; }
+  details.about li { margin-bottom: 5px; }
+
+  @media (max-width: 520px) {
+    .cell { min-height: 66px; }
+    .cell .v { font-size: 1rem; }
+    .cell .cnt { font-size: .62rem; }
+    .ctl input[type=range] { width: 110px; }
+    table.terms th, table.terms td { padding: 4px 4px; font-size: .76rem; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="masthead">
+    <h1>직접 걸어서 얻은 가치 함수</h1>
+    <p>5장 몬테카를로법 정책 평가 · <code>s02_mc_eval.py</code>의 계산을 한 걸음·한 에피소드씩</p>
+  </header>
+
+  <section class="panel">
+    <div class="controls">
+      <label class="ctl">
+        할인율 γ
+        <input id="gamma" type="range" min="0" max="0.99" step="0.01" value="0.9">
+        <span class="val" id="gamma-val">0.90</span>
+      </label>
+
+      <span class="ctl">
+        진행 단위
+        <span class="seg" id="grain">
+          <button type="button" data-v="episode" aria-pressed="true">한 에피소드</button>
+          <button type="button" data-v="step" aria-pressed="false">한 걸음</button>
+        </span>
+      </span>
+
+      <span class="ctl">
+        평균 방식
+        <span class="seg" id="avg">
+          <button type="button" data-v="n" aria-pressed="true">1/n 평균</button>
+          <button type="button" data-v="alpha" aria-pressed="false">고정값 α</button>
+        </span>
+      </span>
+
+      <label class="ctl off" id="alpha-ctl">
+        α
+        <input id="alpha" type="range" min="0.01" max="0.5" step="0.01" value="0.1" disabled>
+        <span class="val" id="alpha-val">0.10</span>
+      </label>
+
+      <label class="ctl"><input id="firstvisit" type="checkbox"> 첫 방문만 세기</label>
+      <label class="ctl"><input id="diff" type="checkbox"> 참값과의 차이 보기</label>
+    </div>
+
+    <div class="actions">
+      <button type="button" class="primary" id="step">다음</button>
+      <button type="button" id="run10">10 에피소드</button>
+      <button type="button" id="run100">100 에피소드</button>
+      <button type="button" id="run1000">1,000 에피소드</button>
+      <button type="button" id="reset">초기화</button>
+      <span class="hint">스페이스바로도 진행됩니다</span>
+    </div>
+  </section>
+
+  <section class="panel">
+    <div class="stats">
+      <span class="stat"><span class="label">에피소드</span><span class="num" id="ep">0</span></span>
+      <span class="stat"><span class="label">총 걸음</span><span class="num" id="steps">0</span></span>
+      <span class="stat"><span class="label">참값과의 오차 RMSE</span><span class="num" id="rmse">—</span></span>
+      <span class="stat"><span class="label">상태</span><span class="flag" id="flag">시작 전</span></span>
+    </div>
+
+    <figure class="chart" id="chart">
+      <figcaption>에피소드 수에 따른 오차 RMSE(로그–로그) · 참값 v<sub>π</sub>는 4장 방식으로 따로 구해둔 것</figcaption>
+    </figure>
+  </section>
+
+  <section class="panel">
+    <div class="grid" id="grid"></div>
+    <div class="legend">
+      <span>낮음</span><span class="bar"></span><span>높음</span>
+      <span id="scale" style="margin-left:6px"></span>
+    </div>
+  </section>
+
+  <section class="panel replay" id="replay"></section>
+
+  <section class="panel">
+    <details class="about">
+      <summary>이 화면이 계산하는 것</summary>
+      <div>
+        <p style="margin:0">
+          4장과 같은 3×4 그리드 월드에서 무작위 정책(네 방향 각 0.25)을 평가합니다.
+          다만 이번에는 <code>next_state()</code>도 <code>reward()</code>도 부르지 않습니다.
+          시작 칸 (2, 0)에서 한 걸음씩 실제로 걸어보고, 목표(0, 3)에 닿아 에피소드가 끝나면
+          그 경험을 <b>뒤에서부터</b> 되짚으며 수익 G를 구해 평균에 넣습니다.
+        </p>
+        <p style="margin:10px 0 0">
+          <code>G ← γG + R</code> · <code>V(s) ← V(s) + (1/n){ G − V(s) }</code>
+        </p>
+        <ul>
+          <li><b>한 걸음</b> 단위로 두면 에피소드 도중에는 경험만 쌓이고 <b>V가 전혀 바뀌지 않는 것</b>을 볼 수 있습니다. 목표에 닿는 순간 표가 뒤집히며 한꺼번에 갱신됩니다 — MC법의 특징이자 한계이고, 6장 TD법이 고치는 지점입니다.</li>
+          <li>되짚기 표는 <code>reversed(self.memory)</code>를 그대로 옮긴 것입니다. 아래에서 위로 읽으면 <code>G = R + γG′</code>가 한 줄씩 쌓입니다. 같은 한 판에서 거쳐 간 모든 상태의 수익을 한 번에 얻는다는 것이 5.2.3의 요점입니다.</li>
+          <li><b>참값과의 차이 보기</b>를 켜면 각 칸이 V(s) − v<sub>π</sub>(s)로 바뀝니다. 목표에서 먼 칸일수록 오차가 큰데, 방문 횟수가 적기 때문입니다(오차는 대략 σ<sub>G</sub>/√방문 횟수).</li>
+          <li>그래프의 점선은 1/√n 기준선입니다. 표본 평균의 오차가 이 기울기로 느리게 줄어드는 것이 MC법이 정확도를 얻는 유일한 방법입니다. 붉은 파선은 같은 γ에서 4장 DP를 문턱 10<sup>−3</sup>까지 돌렸을 때 남는 오차로, MC법이 여기까지 내려오려면 에피소드가 얼마나 필요한지 견주어 볼 수 있습니다.</li>
+          <li><b>고정값 α</b>는 5.4.4의 두 번째 개선입니다. 1/n 평균은 계속 수렴해 가지만, α는 최근 수익에 비중을 두는 대신 참값 근처에서 <b>계속 흔들립니다</b> — 그래프가 어느 높이에서 더 내려가지 않는 모습으로 나타납니다. 정책이 변하는 제어(5.4)에서는 이쪽이 필요합니다.</li>
+          <li><b>첫 방문만 세기</b>를 켜면 한 에피소드에서 같은 상태를 여러 번 지나도 처음 지난 한 번만 셈합니다(first-visit MC). 책의 구현은 모두 세는 every-visit 방식이고, 둘 다 참값으로 수렴합니다.</li>
+          <li>목표 칸의 V는 언제나 0입니다. 파이썬 코드도 목표에 도달한 걸음의 <code>(state, action, reward)</code>까지만 저장하므로 목표 상태 자체는 메모리에 들어가지 않습니다. 벽 칸 (1, 1)은 한 번도 방문하지 않아 초깃값 0 그대로입니다 — DP는 12칸을 빠짐없이 훑지만 MC법은 <b>가본 곳만</b> 배웁니다.</li>
+          <li>γ·평균 방식·방문 세는 법을 바꾸면 처음부터 다시 시작합니다.</li>
+        </ul>
+      </div>
+    </details>
+  </section>
+
+  <footer class="footer">
+    <p>
+      예제 코드 저장소:
+      <a href="https://github.com/sajacaros/deep-learning-from-scratch-4" target="_blank" rel="noopener noreferrer">sajacaros/deep-learning-from-scratch-4</a>
+      · 원저작 코드
+      <a href="https://github.com/WegraLee/deep-learning-from-scratch-4" target="_blank" rel="noopener noreferrer">WegraLee/deep-learning-from-scratch-4</a>
+    </p>
+  </footer>
+
+</div>
+
+<script>
+/* 5장 몬테카를로법 정책 평가 — common/gridworld.py 의 그리드 월드를 그대로 옮겼다.
+   다만 이 화면은 모델(next_state/reward)을 '환경 쪽'에서만 쓰고,
+   학습하는 쪽은 env.step() 이 돌려주는 (다음 상태, 보상, 종료) 만 본다. */
+
+const H = 3, W = 4;
+const REWARD = [
+  [0, 0, 0, 1.0],
+  [0, null, 0, -1.0],
+  [0, 0, 0, 0],
+];
+const GOAL = '0,3';
+const WALL = '1,1';
+const START = '2,0';
+const MOVES = [[-1, 0], [1, 0], [0, -1], [0, 1]];
+const ACTION_NAME = ['UP ↑', 'DOWN ↓', 'LEFT ←', 'RIGHT →'];
+const DP_THRESHOLD = 0.001;   // 4장 정책 평가의 문턱
+const MAX_STEPS = 5000;       // 무작위 정책이 유난히 헤맬 때를 위한 안전장치
+
+const key = (y, x) => y + ',' + x;
+const parse = (s) => s.split(',').map(Number);
+
+/* 벽을 뺀 모든 칸. RMSE 는 여기서 목표까지 뺀 10칸에 대해 잰다 */
+const ORDER = [];
+for (let y = 0; y < H; y++) {
+  for (let x = 0; x < W; x++) {
+    if (key(y, x) !== WALL) ORDER.push(key(y, x));
+  }
+}
+const VALID = ORDER.filter((s) => s !== GOAL);
+
+function nextState(y, x, a) {
+  const ny = y + MOVES[a][0], nx = x + MOVES[a][1];
+  if (nx < 0 || nx >= W || ny < 0 || ny >= H) return [y, x];  // 테두리 밖이면 제자리
+  if (key(ny, nx) === WALL) return [y, x];                    // 벽이어도 제자리
+  return [ny, nx];
+}
+
+function zeros() {
+  const v = {};
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) v[key(y, x)] = 0;
+  return v;
+}
+
+/* ---------- 견줄 참값: 4장의 반복적 정책 평가 ---------- */
+
+function dpEval(gamma, threshold) {
+  const V = zeros();
+  for (let iter = 0; iter < 100000; iter++) {
+    let delta = 0;
+    for (const s of ORDER) {
+      if (s === GOAL) continue;
+      const [y, x] = parse(s);
+      let value = 0;
+      for (let a = 0; a < 4; a++) {
+        const [ny, nx] = nextState(y, x, a);
+        value += 0.25 * (REWARD[ny][nx] + gamma * V[key(ny, nx)]);
+      }
+      delta = Math.max(delta, Math.abs(value - V[s]));
+      V[s] = value;
+    }
+    if (delta < threshold) break;
+  }
+  return V;
+}
+
+function rmse(V, ref) {
+  let sum = 0;
+  for (const s of VALID) {
+    const d = V[s] - ref[s];
+    sum += d * d;
+  }
+  return Math.sqrt(sum / VALID.length);
+}
+
+/* ---------- 상태 ---------- */
+
+const S = {
+  gamma: 0.9,
+  grain: 'episode',   // 'episode' | 'step'
+  avg: 'n',           // 'n' | 'alpha'
+  alpha: 0.1,
+  firstVisit: false,
+  showDiff: false,
+
+  V: null,            // 추정 중인 가치 함수
+  cnts: null,         // 상태별 방문 횟수 (증분 평균의 n)
+  memory: [],         // 이번 에피소드의 (상태, 행동, 보상)
+  pos: null,          // 에이전트가 지금 서 있는 칸. 에피소드가 끝나면 null
+  phase: 'idle',      // 'idle' | 'walking' | 'evaluated'
+  episodes: 0,
+  totalSteps: 0,
+  history: [],        // 에피소드마다의 RMSE
+  lastEval: null,     // 방금 끝난 에피소드의 되짚기 기록
+
+  vTrue: null,        // 참값 v_π (문턱 1e-13 까지 돌린 DP)
+  dpRmse: 0,          // 4장 DP 를 문턱 1e-3 에서 멈췄을 때 남는 오차
+};
+
+function reset() {
+  S.vTrue = dpEval(S.gamma, 1e-13);
+  S.dpRmse = rmse(dpEval(S.gamma, DP_THRESHOLD), S.vTrue);
+
+  S.V = zeros();
+  S.cnts = zeros();
+  S.memory = [];
+  S.pos = null;
+  S.phase = 'idle';
+  S.episodes = 0;
+  S.totalSteps = 0;
+  S.history = [];
+  S.lastEval = null;
+  render();
+}
+
+/* ---------- 한 판 걷기 ---------- */
+
+function beginEpisode() {
+  S.pos = START;
+  S.memory = [];
+  S.lastEval = null;
+  S.phase = 'walking';
+}
+
+/* 한 걸음. 목표에 닿아 에피소드가 끝났으면 true */
+function walkOneStep() {
+  if (S.phase !== 'walking') beginEpisode();
+
+  const [y, x] = parse(S.pos);
+  const a = Math.floor(Math.random() * 4);       // 무작위 정책: 네 방향 각 0.25
+  const [ny, nx] = nextState(y, x, a);
+  const ns = key(ny, nx);
+  const r = REWARD[ny][nx] ?? 0;
+
+  S.memory.push({ s: S.pos, a, r, next: ns });   // agent.add(state, action, reward)
+  S.totalSteps++;
+
+  if (ns === GOAL) {          // 목표에 도달해야
+    evaluate();               // 비로소 수익을 알 수 있음
+    S.phase = 'evaluated';
+    S.pos = null;
+    return true;
+  }
+  S.pos = ns;
+  return false;
+}
+
+/* agent.eval() — 메모리를 뒤에서부터 훑으며 G 를 쌓고 평균에 넣는다 */
+function evaluate() {
+  const first = {};
+  S.memory.forEach((m, i) => { if (!(m.s in first)) first[m.s] = i; });
+
+  const rows = [];
+  let G = 0;
+  for (let i = S.memory.length - 1; i >= 0; i--) {
+    const m = S.memory[i];
+    G = S.gamma * G + m.r;
+
+    const skipped = S.firstVisit && first[m.s] !== i;
+    const before = S.V[m.s];
+    let n = S.cnts[m.s];
+    let after = before;
+
+    if (!skipped) {
+      n += 1;
+      S.cnts[m.s] = n;
+      after = S.avg === 'n' ? before + (G - before) / n : before + (G - before) * S.alpha;
+      S.V[m.s] = after;
+    }
+    rows.push({ t: i, s: m.s, a: m.a, r: m.r, G, skipped, n, before, after });
+  }
+
+  S.episodes++;
+  S.history.push(rmse(S.V, S.vTrue));
+  S.lastEval = { rows, length: S.memory.length };
+}
+
+function step() {
+  if (S.grain === 'step') walkOneStep();
+  else runEpisodes(1);
+  render();
+}
+
+function runEpisodes(count) {
+  for (let k = 0; k < count; k++) {
+    let guard = 0;
+    while (!walkOneStep() && guard++ < MAX_STEPS) { /* 목표에 닿을 때까지 */ }
+  }
+  render();
+}
+
+/* ---------- 그리기 ---------- */
+
+const grid = document.getElementById('grid');
+
+function heat(v, scale) {
+  if (scale < 1e-9) return 'transparent';
+  const t = Math.max(-1, Math.min(1, v / scale));
+  const a = (Math.abs(t) * 0.45).toFixed(3);
+  return t >= 0 ? `rgba(47, 107, 216, ${a})` : `rgba(190, 70, 80, ${a})`;
+}
+
+function render() {
+  // 이번 에피소드에서 각 칸을 몇 번 지났는지
+  const visits = {};
+  for (const m of S.memory) visits[m.s] = (visits[m.s] || 0) + 1;
+
+  const shown = {};
+  for (const s of ORDER) shown[s] = S.showDiff ? S.V[s] - S.vTrue[s] : S.V[s];
+
+  let scale = 0;
+  for (const s of ORDER) scale = Math.max(scale, Math.abs(shown[s]));
+  scale = Math.max(scale, 0.05);
+
+  grid.innerHTML = '';
+  for (let y = 0; y < H; y++) {
+    for (let x = 0; x < W; x++) {
+      const s = key(y, x);
+      const cell = document.createElement('div');
+      cell.className = 'cell';
+
+      if (s === WALL) {
+        cell.classList.add('wall');
+        cell.textContent = '벽';
+        grid.appendChild(cell);
+        continue;
+      }
+
+      cell.style.backgroundImage =
+        `linear-gradient(${heat(shown[s], scale)}, ${heat(shown[s], scale)})`;
+
+      if (s === S.pos) cell.classList.add('here');
+      else if (visits[s]) cell.classList.add('onpath');
+
+      const coord = document.createElement('span');
+      coord.className = 'coord';
+      coord.textContent = `(${y}, ${x})`;
+      cell.appendChild(coord);
+
+      const r = REWARD[y][x];
+      if (r) {
+        const tag = document.createElement('span');
+        tag.className = 'tag ' + (r > 0 ? 'plus' : 'minus');
+        tag.textContent = r > 0 ? '+1' : '−1';
+        cell.appendChild(tag);
+      }
+
+      const v = document.createElement('span');
+      v.className = 'v';
+      v.textContent = S.showDiff
+        ? (shown[s] >= 0 ? '+' : '−') + Math.abs(shown[s]).toFixed(3)
+        : shown[s].toFixed(3);
+      cell.appendChild(v);
+
+      const cnt = document.createElement('span');
+      cnt.className = 'cnt';
+      cnt.textContent = S.showDiff
+        ? `참값 ${S.vTrue[s].toFixed(3)}`
+        : (s === GOAL ? '목표 · 갱신 안 함' : `${S.cnts[s]}회 방문`);
+      cell.appendChild(cnt);
+
+      if (s === S.pos) {
+        const dot = document.createElement('span');
+        dot.className = 'agent';
+        cell.appendChild(dot);
+      }
+      if (visits[s]) {
+        const badge = document.createElement('span');
+        badge.className = 'badge';
+        badge.textContent = `이번 ${visits[s]}`;
+        cell.appendChild(badge);
+      }
+
+      grid.appendChild(cell);
+    }
+  }
+
+  document.getElementById('ep').textContent = S.episodes.toLocaleString();
+  document.getElementById('steps').textContent = S.totalSteps.toLocaleString();
+
+  const err = S.history.length ? S.history[S.history.length - 1] : null;
+  document.getElementById('rmse').textContent = err === null ? '—' : err.toFixed(4);
+
+  const flag = document.getElementById('flag');
+  if (S.phase === 'walking') {
+    flag.textContent = `걷는 중 · ${S.memory.length}걸음째`;
+    flag.className = 'flag';
+  } else if (S.phase === 'evaluated') {
+    flag.textContent = '에피소드 끝 — 되짚어 갱신함';
+    flag.className = 'flag done';
+  } else {
+    flag.textContent = '시작 전';
+    flag.className = 'flag';
+  }
+
+  document.getElementById('scale').textContent = `±${scale.toFixed(2)}`;
+  renderChart();
+  renderReplay();
+}
+
+/* 가로축은 에피소드 수, 세로축은 RMSE. 둘 다 로그 눈금이라 1/√n 이 직선으로 보인다 */
+
+const CHART_H = 190;
+const M = { left: 64, right: 16, top: 12, bottom: 34 };
+
+function renderChart() {
+  const box = document.getElementById('chart');
+  const h = S.history;
+
+  const w = Math.max(280, box.clientWidth || 600);
+  const x0 = M.left, x1 = w - M.right, y0 = M.top, y1 = CHART_H - M.bottom;
+
+  const N = Math.max(h.length, 10);
+  const xHi = Math.log10(N);
+  const xOf = (e) => x0 + (xHi > 0 ? Math.log10(Math.max(e, 1)) / xHi : 0) * (x1 - x0);
+
+  // 세로 범위: 관측된 오차와 DP 기준선, 1/√n 기준선의 끝값까지 담는다
+  let lo = S.dpRmse, hi = S.dpRmse;
+  for (const v of h) {
+    if (v <= 0) continue;
+    if (v < lo) lo = v;
+    if (v > hi) hi = v;
+  }
+  if (h.length) {
+    const guideEnd = h[0] / Math.sqrt(N);
+    if (guideEnd < lo) lo = guideEnd;
+  }
+  if (!(lo > 0)) lo = 1e-3;
+  const loE = Math.floor(Math.log10(lo));
+  const hiE = Math.ceil(Math.log10(Math.max(hi, lo * 10)));
+  const span = (hiE - loE) || 1;
+  const yOf = (v) => y1 - ((Math.log10(Math.max(v, Math.pow(10, loE))) - loE) / span) * (y1 - y0);
+
+  const parts = [];
+
+  // 가로 격자와 세로축 눈금
+  for (let e = loE; e <= hiE; e++) {
+    const y = yOf(Math.pow(10, e)).toFixed(1);
+    const label = e >= 0 ? String(Math.pow(10, e)) : Math.pow(10, e).toFixed(-e);
+    parts.push(`<line class="gridline" x1="${x0}" y1="${y}" x2="${x1}" y2="${y}"/>`);
+    parts.push(`<line class="tick" x1="${x0 - 4}" y1="${y}" x2="${x0}" y2="${y}"/>`);
+    parts.push(`<text x="${x0 - 8}" y="${y}" text-anchor="end" dominant-baseline="middle">${label}</text>`);
+  }
+
+  // 가로축 눈금 — 10의 거듭제곱, 마지막에 지금까지의 에피소드 수
+  for (let e = 0; e <= Math.ceil(xHi); e++) {
+    const v = Math.pow(10, e);
+    if (v > N) break;
+    const x = xOf(v).toFixed(1);
+    parts.push(`<line class="tick" x1="${x}" y1="${y1}" x2="${x}" y2="${y1 + 4}"/>`);
+    parts.push(`<text x="${x}" y="${y1 + 15}" text-anchor="middle">${v.toLocaleString()}</text>`);
+  }
+  if (h.length > 0 && Math.log10(h.length) % 1 > 0.12) {
+    const x = xOf(h.length).toFixed(1);
+    parts.push(`<line class="tick" x1="${x}" y1="${y1}" x2="${x}" y2="${y1 + 4}"/>`);
+    parts.push(`<text x="${x}" y="${y1 + 15}" text-anchor="middle">${h.length.toLocaleString()}</text>`);
+  }
+
+  // 4장 DP 가 문턱 1e-3 에서 남긴 오차
+  const dpY = yOf(S.dpRmse).toFixed(1);
+  parts.push(`<line class="dp" x1="${x0}" y1="${dpY}" x2="${x1}" y2="${dpY}"/>`);
+  parts.push(`<text class="dp-label" x="${x0 + 6}" y="${Number(dpY) - 5}">4장 DP (문턱 10⁻³)</text>`);
+
+  // 1/√n 기준선 — 첫 점에 맞춰 그은 직선
+  if (h.length > 1) {
+    const gx0 = xOf(1).toFixed(1), gy0 = yOf(h[0]).toFixed(1);
+    const gx1 = xOf(N).toFixed(1), gy1 = yOf(h[0] / Math.sqrt(N)).toFixed(1);
+    parts.push(`<line class="guide" x1="${gx0}" y1="${gy0}" x2="${gx1}" y2="${gy1}"/>`);
+    parts.push(`<text class="guide-label" x="${Number(gx1) - 6}" y="${Number(gy1) - 6}" text-anchor="end">∝ 1/√n</text>`);
+  }
+
+  // 데이터 — 점이 많으면 솎아서 그린다
+  if (h.length > 1) {
+    const stride = Math.max(1, Math.ceil(h.length / 400));
+    const pts = [];
+    for (let i = 0; i < h.length; i += stride) {
+      pts.push(`${xOf(i + 1).toFixed(1)},${yOf(h[i]).toFixed(1)}`);
+    }
+    const last = h.length - 1;
+    if ((last % stride) !== 0) pts.push(`${xOf(h.length).toFixed(1)},${yOf(h[last]).toFixed(1)}`);
+    parts.push(`<polyline class="line" points="${pts.join(' ')}"/>`);
+  }
+  if (h.length > 0 && h.length <= 40) {
+    for (let i = 0; i < h.length; i++) {
+      parts.push(`<circle class="dot" cx="${xOf(i + 1).toFixed(1)}" cy="${yOf(h[i]).toFixed(1)}" r="2.2"/>`);
+    }
+  }
+  if (h.length === 0) {
+    parts.push(`<text x="${((x0 + x1) / 2).toFixed(1)}" y="${((y0 + y1) / 2).toFixed(1)}" text-anchor="middle">에피소드를 시작하면 여기에 그려집니다</text>`);
+  }
+
+  parts.push(`<rect class="frame" x="${x0}" y="${y0}" width="${x1 - x0}" height="${y1 - y0}"/>`);
+  parts.push(`<text class="axis-name" x="${((x0 + x1) / 2).toFixed(1)}" y="${CHART_H - 4}" text-anchor="middle">에피소드 n</text>`);
+  parts.push(`<text class="axis-name" transform="rotate(-90 14 ${((y0 + y1) / 2).toFixed(1)})" x="14" y="${((y0 + y1) / 2).toFixed(1)}" text-anchor="middle" dominant-baseline="middle">RMSE (10칸)</text>`);
+
+  const svg =
+    `<svg viewBox="0 0 ${w} ${CHART_H}" width="${w}" height="${CHART_H}"
+          role="img" aria-label="에피소드 수에 따른 오차 변화">${parts.join('')}</svg>`;
+
+  const cap = box.querySelector('figcaption');
+  box.innerHTML = '';
+  box.appendChild(cap);
+  box.insertAdjacentHTML('beforeend', svg);
+}
+
+const ROW_CAP = 12;   // 표가 길어지면 뒤에서부터 이만큼만 보여준다
+
+function renderReplay() {
+  const box = document.getElementById('replay');
+  const method = S.avg === 'n' ? '1/n 평균' : `고정값 α = ${S.alpha.toFixed(2)}`;
+
+  if (S.phase === 'idle') {
+    box.innerHTML =
+      '<h2>에피소드 되짚기</h2>' +
+      '<p class="sub" style="margin:0">「다음」을 누르면 시작 칸 (2, 0)에서 무작위로 걷기 시작합니다. ' +
+      '목표에 닿아야 수익을 알 수 있으므로, 그때까지는 경험만 쌓입니다.</p>';
+    return;
+  }
+
+  if (S.phase === 'walking') {
+    const rows = S.memory.slice(-ROW_CAP).map((m, i) => {
+      const t = S.memory.length - Math.min(S.memory.length, ROW_CAP) + i;
+      const [y, x] = parse(m.s);
+      return `<tr>
+        <td>t = ${t}</td>
+        <td>(${y}, ${x})</td>
+        <td>${ACTION_NAME[m.a]}</td>
+        <td>${m.r.toFixed(0)}</td>
+        <td>—</td>
+      </tr>`;
+    }).join('');
+
+    const omitted = S.memory.length > ROW_CAP
+      ? `<p class="sub" style="margin:8px 0 0">앞의 ${S.memory.length - ROW_CAP}걸음은 접었습니다.</p>` : '';
+
+    box.innerHTML =
+      `<h2>걷는 중 — 쌓이는 경험 ${S.memory.length}걸음</h2>` +
+      `<p class="sub">agent.add(state, action, reward) 만 하는 구간 · γ = ${S.gamma.toFixed(2)}</p>` +
+      (S.memory.length === 0 ? '<p class="note" style="margin:0">아직 한 걸음도 걷지 않았습니다.</p>' :
+      `<table class="terms">
+         <thead><tr><th>걸음</th><th>상태 s</th><th>행동 a</th><th>R</th><th>G</th></tr></thead>
+         <tbody>${rows}</tbody>
+       </table>${omitted}`) +
+      '<p class="note">G 칸이 비어 있는 것이 MC법의 성격입니다. 앞으로 받을 보상을 아직 모르므로 ' +
+      '<b>에피소드가 끝나기 전에는 V를 하나도 갱신하지 못합니다.</b></p>';
+    return;
+  }
+
+  // 에피소드가 끝난 뒤 — 뒤에서부터 되짚은 기록
+  const ev = S.lastEval;
+  const all = ev.rows;
+  const rows = all.slice(0, ROW_CAP).map((r, i) => {
+    const [y, x] = parse(r.s);
+    const upd = r.skipped
+      ? '건너뜀 (첫 방문 아님)'
+      : `${r.before.toFixed(3)} <span class="arrow">→</span> ${r.after.toFixed(3)}`;
+    return `<tr class="${r.skipped ? 'skip' : ''}${i === 0 ? ' head-sep' : ''}">
+      <td>t = ${r.t}</td>
+      <td>(${y}, ${x})</td>
+      <td>${ACTION_NAME[r.a]}</td>
+      <td>${r.r.toFixed(0)}</td>
+      <td>${r.G.toFixed(4)}</td>
+      <td>${r.skipped ? '—' : r.n}</td>
+      <td>${upd}</td>
+    </tr>`;
+  }).join('');
+
+  const omitted = all.length > ROW_CAP
+    ? `<p class="sub" style="margin:8px 0 0">이 에피소드는 ${all.length}걸음이라 뒤쪽(에피소드 앞부분) ${all.length - ROW_CAP}줄은 접었습니다.</p>` : '';
+
+  box.innerHTML =
+    `<h2>${S.episodes.toLocaleString()}번째 에피소드 되짚기 — ${ev.length}걸음</h2>` +
+    `<p class="sub">reversed(memory) · G ← γG + R · γ = ${S.gamma.toFixed(2)} · 갱신: ${method}` +
+    `${S.firstVisit ? ' · 첫 방문만' : ''}</p>` +
+    `<table class="terms">
+       <thead><tr>
+         <th>걸음</th><th>상태 s</th><th>행동 a</th><th>R</th><th>G</th><th>n</th><th>V(s) 갱신</th>
+       </tr></thead>
+       <tbody>${rows}</tbody>
+     </table>${omitted}` +
+    '<p class="note">맨 윗줄이 <b>마지막 걸음</b>입니다. 위에서 아래로 내려갈수록 에피소드의 앞쪽으로 거슬러 올라가고, ' +
+    'G는 <code>γG + R</code>로 한 줄씩 불어납니다. 한 판을 한 번 걸었을 뿐인데 거쳐 간 모든 상태가 각자의 수익을 얻습니다.</p>';
+}
+
+/* ---------- 이벤트 ---------- */
+
+const gammaInput = document.getElementById('gamma');
+gammaInput.addEventListener('input', () => {
+  S.gamma = Number(gammaInput.value);
+  document.getElementById('gamma-val').textContent = S.gamma.toFixed(2);
+  reset();  // 도중에 γ 를 바꾸면 헷갈리므로 처음부터 다시
+});
+
+const alphaInput = document.getElementById('alpha');
+alphaInput.addEventListener('input', () => {
+  S.alpha = Number(alphaInput.value);
+  document.getElementById('alpha-val').textContent = S.alpha.toFixed(2);
+  reset();
+});
+
+function bindSeg(id, apply) {
+  const seg = document.getElementById(id);
+  seg.addEventListener('click', (e) => {
+    const btn = e.target.closest('button');
+    if (!btn) return;
+    for (const b of seg.querySelectorAll('button')) {
+      b.setAttribute('aria-pressed', String(b === btn));
+    }
+    apply(btn.dataset.v);
+  });
+}
+
+bindSeg('grain', (v) => { S.grain = v; render(); });
+bindSeg('avg', (v) => {
+  S.avg = v;
+  const on = v === 'alpha';
+  alphaInput.disabled = !on;
+  document.getElementById('alpha-ctl').classList.toggle('off', !on);
+  reset();
+});
+
+document.getElementById('firstvisit').addEventListener('change', (e) => {
+  S.firstVisit = e.target.checked;
+  reset();
+});
+
+document.getElementById('diff').addEventListener('change', (e) => {
+  S.showDiff = e.target.checked;
+  render();
+});
+
+document.getElementById('step').addEventListener('click', step);
+document.getElementById('run10').addEventListener('click', () => runEpisodes(10));
+document.getElementById('run100').addEventListener('click', () => runEpisodes(100));
+document.getElementById('run1000').addEventListener('click', () => runEpisodes(1000));
+document.getElementById('reset').addEventListener('click', reset);
+
+window.addEventListener('resize', () => renderChart());
+
+document.addEventListener('keydown', (e) => {
+  if (e.code !== 'Space') return;
+  const t = e.target;
+  if (t && (t.tagName === 'INPUT' || t.tagName === 'BUTTON')) return;  // 조작부에 포커스가 있으면 양보
+  e.preventDefault();
+  step();
+});
+
+reset();
+</script>
+</body>
+</html>
