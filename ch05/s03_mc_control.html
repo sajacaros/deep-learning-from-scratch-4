@@ -67,6 +67,7 @@ code {
 .masthead { margin-bottom: 28px; }
 .masthead h1 { font-size: 1.65rem; margin: 0 0 6px; letter-spacing: -.02em; }
 .masthead p { margin: 0; color: var(--text-dim); font-size: .93rem; }
+.masthead .lede { margin: 12px 0 0; color: var(--text); font-size: .95rem; max-width: 64ch; }
 
 button {
   font: inherit;
@@ -252,6 +253,7 @@ button:hover { border-color: var(--accent); color: var(--accent); }
   <header class="masthead">
     <h1>걸으면서 정책을 고쳐 나가기</h1>
     <p>5장 몬테카를로법 정책 제어 · <code>s03_mc_control.py</code>와 <code>s05_mc_control_offpolicy.py</code>를 한 에피소드씩</p>
+    <p class="lede">평가에서 한 걸음 더 나아가, 걸으면서 정책까지 고쳐 나갑니다. 모델이 없어 V 대신 <b>Q(s, a)</b>를 추정하고, 개선은 탐색을 남겨두는 <b>ε-탐욕</b>으로 합니다.</p>
   </header>
 
   <section class="panel">

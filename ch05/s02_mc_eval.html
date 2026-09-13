@@ -67,6 +67,7 @@ code {
 .masthead { margin-bottom: 28px; }
 .masthead h1 { font-size: 1.65rem; margin: 0 0 6px; letter-spacing: -.02em; }
 .masthead p { margin: 0; color: var(--text-dim); font-size: .93rem; }
+.masthead .lede { margin: 12px 0 0; color: var(--text); font-size: .95rem; max-width: 64ch; }
 
 button {
   font: inherit;
@@ -311,6 +312,7 @@ button:hover { border-color: var(--accent); color: var(--accent); }
   <header class="masthead">
     <h1>직접 걸어서 얻은 가치 함수</h1>
     <p>5장 몬테카를로법 정책 평가 · <code>s02_mc_eval.py</code>의 계산을 한 걸음·한 에피소드씩</p>
+    <p class="lede">환경 모델을 쓰지 않고, 직접 걸어본 결과의 평균으로 가치 함수를 구합니다. 목표에 닿아야 비로소 수익을 알 수 있으므로 V는 <b>에피소드가 끝나는 순간에만</b> 움직입니다.</p>
   </header>
 
   <section class="panel">
