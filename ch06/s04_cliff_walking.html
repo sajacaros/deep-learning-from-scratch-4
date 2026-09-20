@@ -1,0 +1,986 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>벼랑 걷기 — 배운 값과 실제로 받는 보상</title>
+<meta name="description" content="서턴·바르토의 벼랑 걷기(cliff walking) 예제를 SARSA와 Q 러닝으로 동시에 돌리는 데모. Q 러닝이 더 정확한 값을 배우는데도 실제로 받는 보상은 SARSA가 더 높은 이유를 눈으로 확인한다.">
+<style>
+/* 색과 기본 서식 — docs/style.css 에서 이 화면에 필요한 부분만 옮겨왔다 */
+:root {
+  --bg: #f7f8fa;
+  --surface: #ffffff;
+  --border: #e2e5ea;
+  --text: #1c2024;
+  --text-dim: #5c6570;
+  --text-faint: #8b939d;
+  --accent: #2f6bd8;
+  --accent-soft: #eaf0fc;
+  --answer-bg: #f2f7f1;
+  --done: #3f8f52;
+  --minus: #a63d5c;
+  --shadow: 0 1px 2px rgba(20, 25, 35, .06), 0 1px 8px rgba(20, 25, 35, .04);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #14171b;
+    --surface: #1c2025;
+    --border: #2e343b;
+    --text: #e6e9ec;
+    --text-dim: #a3acb6;
+    --text-faint: #78828d;
+    --accent: #7aa7f0;
+    --accent-soft: #212b3d;
+    --answer-bg: #1b2620;
+    --done: #6fbd82;
+    --minus: #e08fa8;
+    --shadow: 0 1px 2px rgba(0, 0, 0, .3), 0 1px 8px rgba(0, 0, 0, .2);
+  }
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo",
+    "Pretendard", "Malgun Gothic", "Noto Sans KR", sans-serif;
+  font-size: 16px;
+  line-height: 1.7;
+  -webkit-text-size-adjust: 100%;
+}
+
+.wrap { max-width: 860px; margin: 0 auto; padding: 32px 20px 80px; }
+
+a { color: var(--accent); }
+
+code {
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  font-size: .9em;
+  background: var(--accent-soft);
+  padding: .1em .35em;
+  border-radius: 4px;
+}
+
+.masthead { margin-bottom: 28px; }
+.masthead h1 { font-size: 1.65rem; margin: 0 0 6px; letter-spacing: -.02em; }
+.masthead p { margin: 0; color: var(--text-dim); font-size: .93rem; }
+.masthead .lede { margin: 12px 0 0; color: var(--text); font-size: .95rem; max-width: 64ch; }
+
+button {
+  font: inherit;
+  font-size: .85rem;
+  padding: 5px 12px;
+  border-radius: 7px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text-dim);
+  cursor: pointer;
+  transition: border-color .15s, color .15s;
+}
+
+button:hover { border-color: var(--accent); color: var(--accent); }
+
+.footer {
+  margin-top: 56px;
+  padding-top: 20px;
+  border-top: 1px solid var(--border);
+  font-size: .8rem;
+  color: var(--text-faint);
+  line-height: 1.75;
+}
+.footer p { margin: 0 0 6px; }
+</style>
+<style>
+  .panel {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    box-shadow: var(--shadow);
+    padding: 16px 18px;
+    margin-bottom: 16px;
+  }
+
+  /* ---------- 조작부 ---------- */
+
+  .controls { display: flex; flex-wrap: wrap; align-items: center; gap: 14px 20px; }
+
+  .ctl { display: flex; align-items: center; gap: 8px; font-size: .86rem; color: var(--text-dim); }
+
+  .ctl input[type=range] { width: 130px; accent-color: var(--accent); }
+
+  .ctl .val {
+    font-variant-numeric: tabular-nums;
+    font-weight: 700;
+    color: var(--text);
+    min-width: 2.6em;
+  }
+
+  .seg { display: inline-flex; border: 1px solid var(--border); border-radius: 7px; overflow: hidden; }
+  .seg button { border: 0; border-radius: 0; padding: 5px 11px; }
+  .seg button + button { border-left: 1px solid var(--border); }
+  .seg button[aria-pressed="true"] { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+
+  .actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; align-items: center; }
+
+  button.primary {
+    font-size: .92rem;
+    font-weight: 600;
+    padding: 8px 18px;
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #fff;
+  }
+  button.primary:hover { background: var(--accent); color: #fff; filter: brightness(1.08); }
+
+  .hint { font-size: .78rem; color: var(--text-faint); margin-left: auto; }
+
+  /* ---------- 상태 표시 ---------- */
+
+  .stats { display: flex; flex-wrap: wrap; gap: 10px 26px; align-items: baseline; }
+
+  .stat .label { font-size: .74rem; color: var(--text-faint); display: block; letter-spacing: .03em; }
+  .stat .num { font-size: 1.15rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+
+  .flag {
+    font-size: .72rem;
+    font-weight: 700;
+    padding: 2px 9px;
+    border-radius: 20px;
+    background: var(--accent-soft);
+    color: var(--accent);
+  }
+  .flag.done { background: var(--answer-bg); color: var(--done); }
+  .flag.warn { background: rgba(166, 61, 92, .12); color: var(--minus); }
+
+  /* ---------- 그래프 ---------- */
+
+  .chart { margin: 18px 0 0; }
+
+  .chart figcaption { font-size: .78rem; color: var(--text-faint); margin-bottom: 8px; }
+
+  .chart svg { display: block; width: 100%; }
+
+  .chart .frame { fill: none; stroke: var(--border); stroke-width: 1; }
+  .chart .gridline { stroke: var(--border); stroke-dasharray: 2 3; opacity: .8; }
+  .chart .tick { stroke: var(--border); }
+
+  .chart text {
+    fill: var(--text-faint);
+    font-size: 10.5px;
+    font-variant-numeric: tabular-nums;
+  }
+  .chart .axis-name { fill: var(--text-dim); }
+
+  .chart .qline { fill: none; stroke: var(--accent); stroke-width: 1.7; stroke-linejoin: round; }
+  .chart .sline { fill: none; stroke: var(--minus); stroke-width: 1.7; stroke-linejoin: round; }
+  .chart .best { stroke: var(--done); stroke-width: 1; stroke-dasharray: 5 3; opacity: .7; }
+  .chart .bestlabel { fill: var(--done); }
+
+  /* ---------- Q 그리드 ---------- */
+
+  .qgrid svg { display: block; width: 100%; height: auto; }
+  .qgrid .cellframe { fill: none; stroke: var(--border); stroke-width: 1.2; }
+  .qgrid .diag { stroke: var(--border); stroke-width: .7; opacity: .7; }
+  .qgrid .arrow { font-size: 15px; fill: var(--text); font-weight: 700; }
+  .qgrid .arrow.on { fill: #fff; }
+  .qgrid .optarrow { font-size: 9px; fill: var(--text-faint); }
+  .qgrid .cliff { fill: var(--minus); fill-opacity: .16; }
+  .qgrid .goal { fill: var(--answer-bg); }
+  .qgrid .label { font-size: 10px; fill: var(--text-dim); }
+  .qgrid .cliffword { font-size: 11px; fill: var(--minus); font-weight: 700; letter-spacing: .3em; }
+  .qgrid .here { fill: none; stroke: var(--accent); stroke-width: 2.2; }
+  .qgrid .bad { fill: none; stroke: var(--minus); stroke-width: 2; }
+  .qgrid .agent { fill: var(--accent); }
+  .qgrid .hit { fill: #fff; fill-opacity: 0; }
+
+  .qgrid .routeline {
+    fill: none;
+    stroke: var(--accent);
+    stroke-width: 9;
+    stroke-opacity: .3;
+    stroke-linejoin: round;
+    stroke-linecap: round;
+  }
+
+  .legend {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: .76rem;
+    color: var(--text-faint);
+    margin-top: 12px;
+  }
+  .legend .bar {
+    flex: 1;
+    height: 8px;
+    border-radius: 4px;
+    background: linear-gradient(90deg,
+      rgba(190, 70, 80, .45), rgba(190, 70, 80, 0), rgba(47, 107, 216, 0), rgba(47, 107, 216, .45));
+  }
+  .legend-note { font-size: .78rem; color: var(--text-faint); margin: 8px 0 0; }
+
+  .note { font-size: .84rem; color: var(--text-dim); margin: 10px 0 0; }
+
+  details.about summary { cursor: pointer; font-size: .9rem; font-weight: 600; }
+  details.about > div { margin-top: 10px; font-size: .88rem; color: var(--text-dim); }
+  details.about ul { margin: 8px 0 0; padding-left: 20px; }
+  details.about li { margin-bottom: 5px; }
+
+  @media (max-width: 520px) {
+    .ctl input[type=range] { width: 100px; }
+  }
+</style>
+<style>
+  /* 이 화면에만 필요한 것 — 판이 가로로 길어 위아래로 쌓는다 */
+
+  .side h2 { font-size: 1.02rem; margin: 0 0 2px; }
+  .side .algo {
+    font-size: .76rem;
+    color: var(--text-faint);
+    margin: 0 0 12px;
+    font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  }
+  .side .stats { gap: 8px 22px; margin-bottom: 12px; }
+  .side .stat .num { font-size: 1.02rem; }
+  .side .stat .num.minus { color: var(--minus); }
+
+  .route {
+    margin: 10px 0 0;
+    font-size: .82rem;
+    color: var(--text-dim);
+    border-top: 1px solid var(--border);
+    padding-top: 10px;
+  }
+  .route b { color: var(--text); }
+  .route .risk { color: var(--minus); font-weight: 700; }
+  .route .safe { color: var(--done); font-weight: 700; }
+
+  .k-s { color: var(--minus); font-weight: 700; }
+  .k-q { color: var(--accent); font-weight: 700; }
+
+  .gap {
+    margin: 12px 0 0;
+    padding: 10px 12px;
+    background: var(--accent-soft);
+    border-radius: 8px;
+    font-size: .84rem;
+    color: var(--text-dim);
+  }
+  .gap b { color: var(--text); }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="masthead">
+    <h1>벼랑 걷기</h1>
+    <p>6장 · 배운 값이 더 정확한 쪽과, 실제로 더 잘 걷는 쪽은 다르다</p>
+    <p class="lede">아래 줄이 통째로 벼랑입니다. 한 걸음마다 −1, 벼랑에 빠지면 <b>−100</b>을 받고 시작 칸으로 되돌아갑니다. 최단 경로는 벼랑에 바짝 붙은 길이지만, ε의 확률로 헤매는 동안에는 그 길이 가장 위험한 길이기도 합니다.</p>
+  </header>
+
+  <section class="panel">
+    <div class="controls">
+      <label class="ctl">
+        ε
+        <input id="epsilon" type="range" min="0" max="0.4" step="0.01" value="0.1">
+        <span class="val" id="epsilon-val">0.10</span>
+      </label>
+
+      <label class="ctl">
+        α
+        <input id="alpha" type="range" min="0.05" max="1" step="0.05" value="0.5">
+        <span class="val" id="alpha-val">0.50</span>
+      </label>
+
+      <label class="ctl">
+        γ
+        <input id="gamma" type="range" min="0.9" max="1" step="0.01" value="1">
+        <span class="val" id="gamma-val">1.00</span>
+      </label>
+
+      <span class="ctl">
+        재생 속도
+        <span class="seg speed" id="speed">
+          <button type="button" data-v="slow" aria-pressed="false">느리게</button>
+          <button type="button" data-v="normal" aria-pressed="true">보통</button>
+          <button type="button" data-v="fast" aria-pressed="false">빠르게</button>
+          <button type="button" data-v="max" aria-pressed="false">최대</button>
+        </span>
+      </span>
+
+      <label class="ctl"><input id="decay" type="checkbox"> ε을 판마다 줄이기</label>
+      <label class="ctl"><input id="opt" type="checkbox"> 최적 행동과 견주기</label>
+    </div>
+
+    <div class="actions">
+      <button type="button" class="primary" id="play">▶ 재생</button>
+      <button type="button" id="step">한 걸음</button>
+      <button type="button" id="episode">한 에피소드</button>
+      <button type="button" id="run100">100 에피소드</button>
+      <button type="button" id="reset">초기화</button>
+      <span class="hint">스페이스바로 재생·일시정지</span>
+    </div>
+  </section>
+
+  <section class="panel side qgrid" id="side-sarsa">
+    <h2>SARSA <span class="flag" id="flag-sarsa">시작 전</span></h2>
+    <p class="algo">Q(s,a) ← Q(s,a) + α{ R + γ·Q(s′, A′) − Q(s,a) }</p>
+    <div class="stats">
+      <span class="stat"><span class="label">에피소드</span><span class="num" id="ep-sarsa">0</span></span>
+      <span class="stat"><span class="label">이번 판 보상</span><span class="num" id="cur-sarsa">—</span></span>
+      <span class="stat"><span class="label">최근 50판 평균</span><span class="num" id="avg-sarsa">—</span></span>
+      <span class="stat"><span class="label">배운 값 max Q(S)</span><span class="num" id="val-sarsa">—</span></span>
+      <span class="stat"><span class="label">벼랑에 빠진 횟수</span><span class="num" id="fall-sarsa">0</span></span>
+    </div>
+    <div id="svg-sarsa"></div>
+    <p class="route" id="route-sarsa"></p>
+  </section>
+
+  <section class="panel side qgrid" id="side-q">
+    <h2>Q 러닝 <span class="flag" id="flag-q">시작 전</span></h2>
+    <p class="algo">Q(s,a) ← Q(s,a) + α{ R + γ·max<sub>a</sub>Q(s′, a) − Q(s,a) }</p>
+    <div class="stats">
+      <span class="stat"><span class="label">에피소드</span><span class="num" id="ep-q">0</span></span>
+      <span class="stat"><span class="label">이번 판 보상</span><span class="num" id="cur-q">—</span></span>
+      <span class="stat"><span class="label">최근 50판 평균</span><span class="num" id="avg-q">—</span></span>
+      <span class="stat"><span class="label">배운 값 max Q(S)</span><span class="num" id="val-q">—</span></span>
+      <span class="stat"><span class="label">벼랑에 빠진 횟수</span><span class="num" id="fall-q">0</span></span>
+    </div>
+    <div id="svg-q"></div>
+    <p class="route" id="route-q"></p>
+  </section>
+
+  <section class="panel">
+    <div class="legend" style="margin-top:0">
+      <span>낮음</span><span class="bar"></span><span>높음</span>
+      <span id="scale" style="margin-left:6px"></span>
+    </div>
+    <p class="legend-note">칸마다 네 방향의 Q(s, a)를 삼각형으로 나눠 칠했습니다(칸에 마우스를 올리면 네 값이 뜹니다). 가운데 화살표는 지금 Q를 탐욕화한 행동, 파란 원은 에이전트의 자리, 옅은 파란 띠는 <b>시작 칸에서 탐욕 행동만 따라갔을 때의 길</b>입니다.</p>
+
+    <p class="gap" id="gap"></p>
+
+    <figure class="chart" id="chart">
+      <figcaption><span class="k-s">붉은색 SARSA</span> · <span class="k-q">파란색 Q 러닝</span> — 판마다 실제로 받은 보상의 합 (최근 10판 평균)</figcaption>
+    </figure>
+  </section>
+
+  <section class="panel">
+    <details class="about">
+      <summary>이 화면이 계산하는 것</summary>
+      <div>
+        <p style="margin:0">
+          서턴·바르토 『Reinforcement Learning』의 <b>벼랑 걷기</b>(cliff walking) 예제입니다.
+          4×12 판의 아래 줄에서 왼쪽 끝이 시작 칸 S, 오른쪽 끝이 목표 칸 G이고, 그 사이 열 칸이 벼랑입니다.
+          한 걸음마다 −1, 벼랑에 들어서면 −100을 받고 S로 되돌아갑니다(판은 끝나지 않습니다).
+          6장의 SARSA와 Q 러닝을 같은 판에서 한 걸음씩 나란히 돌립니다.
+        </p>
+        <ul>
+          <li><b>최적 경로는 벼랑 바로 위 줄입니다.</b> S에서 한 칸 올라가 오른쪽으로 쭉 간 뒤 내려오면 13걸음, 보상 합은 −13입니다. 「최적 행동과 견주기」를 켜면 그 길이 회색 화살표로 깔립니다.</li>
+          <li><b>Q 러닝은 그 길을 배웁니다.</b> 갱신식의 <code>max</code>가 벼랑으로 떨어지는 행동의 값을 그 자리에서 버리기 때문에, −100이 앞칸으로 한 걸음도 번지지 않습니다. 「배운 값 max Q(S)」가 −13 근처로 수렴합니다.</li>
+          <li><b>그런데 실제로 받는 보상은 더 낮습니다.</b> 벼랑에 붙어 걷는 동안 ε의 확률로 아래쪽이 뽑히면 −100입니다. 「최근 50판 평균」을 보세요. 배운 값 −13과 실제 −35 안팎의 <b>벌어진 간격</b>이 Q 러닝이 모르는 몫입니다.</li>
+          <li><b>SARSA는 그 몫을 값에 적어둡니다.</b> 다음 상태의 값으로 실제로 고른 A′의 Q를 쓰므로, 벼랑에 붙은 칸의 값이 ε만큼 깎입니다. 그래서 한두 줄 위로 돌아가는 길을 배우고, 배운 값과 실제로 받는 보상이 서로 가깝습니다.</li>
+          <li><b>결론이 뒤집히는 자리입니다.</b> 값의 정확도로는 Q 러닝이 이기지만(수렴 대상이 q* 자체), ε-탐욕으로 걷는 동안 <b>실제로 받는 점수</b>로는 SARSA가 이깁니다. 평가하는 정책과 걷는 정책이 같은지 다른지가 그대로 드러나는 예제입니다.</li>
+          <li>「ε을 판마다 줄이기」를 켜면 ε이 <code>ε₀ · 100/(100+판 수)</code>로 작아집니다. 헤맬 일이 줄어드는 만큼 Q 러닝의 실제 보상이 −13까지 올라옵니다 — 벼랑에 붙는 길이 옳았다는 뜻입니다. SARSA도 따라 내려오지만 이미 배워둔 안전한 길 때문에 더 느려서, 1,000판 안에서는 대개 −17 근처에 머뭅니다.</li>
+          <li>ε을 0으로 내리면 두 방식이 처음부터 같아지고, 0.3 근처로 올리면 SARSA가 위쪽 줄까지 물러납니다.</li>
+          <li>γ는 1.00이 기본값입니다. 걸음마다 −1이 쌓이므로 할인하지 않아도 짧은 길이 유리합니다.</li>
+          <li>ε·α·γ를 바꾸면 양쪽 모두 처음부터 다시 시작합니다. 1,000 에피소드에 닿으면 자동으로 멈춥니다.</li>
+        </ul>
+      </div>
+    </details>
+  </section>
+
+  <footer class="footer">
+    <p>
+      예제 코드 저장소:
+      <a href="https://github.com/sajacaros/deep-learning-from-scratch-4" target="_blank" rel="noopener noreferrer">sajacaros/deep-learning-from-scratch-4</a>
+      · 원저작 코드
+      <a href="https://github.com/WegraLee/deep-learning-from-scratch-4" target="_blank" rel="noopener noreferrer">WegraLee/deep-learning-from-scratch-4</a>
+    </p>
+  </footer>
+
+</div>
+<script>
+/* 6장 벼랑 걷기 — SARSA 와 Q 러닝을 같은 판에서 한 걸음씩 나란히 돌린다.
+   판의 규격은 서턴·바르토 예제 6.6 을 그대로 따랐다. */
+
+const H = 4, W = 12;
+const START = '3,0';
+const GOAL = '3,11';
+const STEP_R = -1;
+const CLIFF_R = -100;
+const MOVES = [[-1, 0], [1, 0], [0, -1], [0, 1]];
+const ARROW = ['↑', '↓', '←', '→'];
+const MAX_STEPS = 3000;          // 맴도는 판을 끊는 안전장치
+const MAX_EPISODES = 1000;
+const ROUTE_CAP = 80;
+const AVG_WINDOW = 50;           // 「최근 50판 평균」
+const SMOOTH = 10;               // 그래프를 고르게 하는 이동평균
+
+const key = (y, x) => y + ',' + x;
+const parse = (s) => s.split(',').map(Number);
+const isCliff = (y, x) => y === H - 1 && x >= 1 && x <= W - 2;
+
+const ORDER = [];
+for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) ORDER.push(key(y, x));
+const VALID = ORDER.filter((s) => s !== GOAL && !isCliff(...parse(s)));
+
+/* 한 걸음의 결과 — 벼랑은 −100 을 주고 시작 칸으로 되돌린다(판은 끝나지 않는다) */
+function move(s, a) {
+  const [y, x] = parse(s);
+  let ny = y + MOVES[a][0], nx = x + MOVES[a][1];
+  if (ny < 0 || ny >= H || nx < 0 || nx >= W) { ny = y; nx = x; }
+  if (isCliff(ny, nx)) return { ns: START, r: CLIFF_R, done: false, fell: true };
+  const ns = key(ny, nx);
+  return { ns, r: STEP_R, done: ns === GOAL, fell: false };
+}
+
+/* ---------- 정책 ---------- */
+
+function argmaxIdx(qs) {
+  let m = -Infinity, best = 0;
+  for (let a = 0; a < 4; a++) if (qs[a] > m) { m = qs[a]; best = a; }
+  return best;
+}
+
+function epsGreedy(qs, eps) {
+  if (Math.random() < eps) return Math.floor(Math.random() * 4);
+  return argmaxIdx(qs);
+}
+
+/* ---------- 견줄 기준: 4장 가치 반복법 ---------- */
+
+function valueIteration(gamma) {
+  const V = {};
+  for (const s of ORDER) V[s] = 0;
+  for (let iter = 0; iter < 20000; iter++) {
+    let delta = 0;
+    for (const s of VALID) {
+      let best = -Infinity;
+      for (let a = 0; a < 4; a++) {
+        const { ns, r, done } = move(s, a);
+        best = Math.max(best, r + gamma * (done ? 0 : V[ns]));
+      }
+      delta = Math.max(delta, Math.abs(best - V[s]));
+      V[s] = best;
+    }
+    if (delta < 1e-12) break;
+  }
+  return V;
+}
+
+function optimalActions(V, gamma) {
+  const opt = {};
+  for (const s of VALID) {
+    const qs = [];
+    for (let a = 0; a < 4; a++) {
+      const { ns, r, done } = move(s, a);
+      qs.push(r + gamma * (done ? 0 : V[ns]));
+    }
+    const best = Math.max(...qs);
+    opt[s] = qs.map((q, a) => (q > best - 1e-9 ? a : -1)).filter((a) => a >= 0);
+  }
+  return opt;
+}
+
+/* ---------- 두 에이전트 ---------- */
+
+function makeAgent(mode) {
+  const ag = {
+    mode,                 // 'sarsa' | 'q'
+    Q: {},
+    pos: null,
+    nextA: null,          // SARSA 는 A′ 를 미리 뽑아 들고 다닌다
+    phase: 'idle',        // 'idle' | 'walking' | 'ended'
+    episodes: 0,
+    steps: 0,
+    sum: 0,               // 이번 판에서 받은 보상의 합
+    lastSum: null,
+    falls: 0,
+    fallsThis: 0,
+    truncated: false,
+    history: [],          // 판마다의 보상 합
+  };
+  for (const s of ORDER) ag.Q[s] = [0, 0, 0, 0];
+  return ag;
+}
+
+const S = {
+  epsilon: 0.1,
+  alpha: 0.5,
+  gamma: 1,
+  decay: false,
+  speed: 'normal',
+  showOpt: false,
+  playing: false,
+  sarsa: null,
+  q: null,
+  vStar: null,
+  vFlat: null,      // γ 와 무관한 '걸음 수' 기준 — 그래프의 최적선은 할인하지 않은 보상 합이다
+  optActions: null,
+};
+
+const SPEED = {
+  slow: { delay: 380, batch: 1 },
+  normal: { delay: 90, batch: 1 },
+  fast: { delay: 30, batch: 8 },
+  max: { delay: 16, batch: 400 },
+};
+
+function agents() { return [S.sarsa, S.q]; }
+
+function epsOf(ag) {
+  return S.decay ? S.epsilon * (100 / (100 + ag.episodes)) : S.epsilon;
+}
+
+function reset() {
+  pause();
+  S.vStar = valueIteration(S.gamma);
+  S.vFlat = S.gamma === 1 ? S.vStar : valueIteration(1);
+  S.optActions = optimalActions(S.vStar, S.gamma);
+  S.sarsa = makeAgent('sarsa');
+  S.q = makeAgent('q');
+  render();
+}
+
+/* ---------- 한 걸음 ---------- */
+
+function beginEpisode(ag) {
+  ag.pos = START;
+  ag.steps = 0;
+  ag.sum = 0;
+  ag.fallsThis = 0;
+  ag.truncated = false;
+  ag.phase = 'walking';
+  ag.nextA = ag.mode === 'sarsa' ? epsGreedy(ag.Q[START], epsOf(ag)) : null;
+}
+
+function finishEpisode(ag) {
+  ag.episodes++;
+  ag.lastSum = ag.sum;
+  ag.history.push(ag.sum);
+  ag.phase = 'ended';
+  ag.pos = null;
+  ag.nextA = null;
+}
+
+function walkOneStep(ag) {
+  if (ag.episodes >= MAX_EPISODES && ag.phase !== 'walking') return true;
+  if (ag.phase !== 'walking') beginEpisode(ag);
+
+  const eps = epsOf(ag);
+  const s = ag.pos;
+  const a = ag.mode === 'sarsa' ? ag.nextA : epsGreedy(ag.Q[s], eps);
+  const { ns, r, done, fell } = move(s, a);
+
+  ag.sum += r;
+  ag.steps++;
+  if (fell) { ag.falls++; ag.fallsThis++; }
+
+  if (ag.mode === 'sarsa') {
+    // A′ 를 먼저 뽑아야 갱신할 수 있다 — 그 A′ 가 다음 걸음이 된다
+    const na = done ? null : epsGreedy(ag.Q[ns], eps);
+    const target = r + S.gamma * (done ? 0 : ag.Q[ns][na]);
+    ag.Q[s][a] += (target - ag.Q[s][a]) * S.alpha;
+    ag.nextA = na;
+  } else {
+    const target = r + S.gamma * (done ? 0 : Math.max(...ag.Q[ns]));
+    ag.Q[s][a] += (target - ag.Q[s][a]) * S.alpha;
+  }
+
+  if (done) { finishEpisode(ag); return true; }
+
+  if (ag.steps >= MAX_STEPS) {
+    ag.truncated = true;
+    finishEpisode(ag);
+    return true;
+  }
+  ag.pos = ns;
+  return false;
+}
+
+function stepBoth() {
+  for (const ag of agents()) walkOneStep(ag);
+}
+
+function episodeBoth() {
+  for (const ag of agents()) {
+    let guard = 0;
+    while (!walkOneStep(ag) && guard++ < MAX_STEPS + 5) { /* 한 판 */ }
+  }
+}
+
+function runEpisodes(count) {
+  for (let k = 0; k < count; k++) episodeBoth();
+}
+
+function finished() { return agents().every((ag) => ag.episodes >= MAX_EPISODES); }
+
+/* ---------- 탐욕 경로 ---------- */
+
+function greedyRoute(ag) {
+  const cells = [START];
+  const seen = new Set();
+  let s = START;
+  for (let i = 0; i < ROUTE_CAP; i++) {
+    if (s === GOAL) return { cells, reached: true, fell: false };
+    if (seen.has(s)) return { cells, reached: false, fell: false };
+    seen.add(s);
+    const { ns, fell } = move(s, argmaxIdx(ag.Q[s]));
+    if (fell) return { cells, reached: false, fell: true };
+    if (ns === s) return { cells, reached: false, fell: false };
+    cells.push(ns);
+    s = ns;
+  }
+  return { cells, reached: false, fell: false };
+}
+
+/* ---------- 그리드 그리기 ---------- */
+
+const C = 62, GAP = 4;
+
+function heat(v, lo, hi) {
+  if (hi - lo < 1e-9) return 'transparent';
+  const t = Math.max(0, Math.min(1, (v - lo) / (hi - lo)));   // 0 낮음 · 1 높음
+  const d = (t - 0.5) * 2;
+  const alpha = (Math.abs(d) * 0.45).toFixed(3);
+  return d >= 0 ? `rgba(47, 107, 216, ${alpha})` : `rgba(190, 70, 80, ${alpha})`;
+}
+
+function center(s) {
+  const [y, x] = parse(s);
+  return [x * (C + GAP) + C / 2, y * (C + GAP) + C / 2];
+}
+
+function renderGrid(ag, mountId, lo, hi, route) {
+  const w = W * C + (W - 1) * GAP, h = H * C + (H - 1) * GAP;
+  const p = [];
+
+  if (route.cells.length > 1) {
+    const pts = route.cells.map((s) => center(s).map((v) => v.toFixed(1)).join(',')).join(' ');
+    p.push(`<polyline class="routeline" points="${pts}"/>`);
+  }
+
+  for (let y = 0; y < H; y++) {
+    for (let x = 0; x < W; x++) {
+      const s = key(y, x);
+      const cx = x * (C + GAP), cy = y * (C + GAP);
+      const mx = cx + C / 2, my = cy + C / 2;
+
+      if (isCliff(y, x)) {
+        p.push(`<rect class="cliff" x="${cx}" y="${cy}" width="${C}" height="${C}" rx="6"/>`);
+        p.push(`<rect class="cellframe" x="${cx}" y="${cy}" width="${C}" height="${C}" rx="6"/>`);
+        continue;
+      }
+      if (s === GOAL) {
+        p.push(`<rect class="goal" x="${cx}" y="${cy}" width="${C}" height="${C}" rx="6"/>`);
+        p.push(`<rect class="cellframe" x="${cx}" y="${cy}" width="${C}" height="${C}" rx="6"/>`);
+        p.push(`<text class="label" x="${mx}" y="${my + 4}" text-anchor="middle">G</text>`);
+        continue;
+      }
+
+      const tri = [
+        `${mx},${my} ${cx + C},${cy} ${cx},${cy}`,
+        `${cx},${cy + C} ${cx + C},${cy + C} ${mx},${my}`,
+        `${cx},${cy} ${mx},${my} ${cx},${cy + C}`,
+        `${mx},${my} ${cx + C},${cy} ${cx + C},${cy + C}`,
+      ];
+      for (let a = 0; a < 4; a++) {
+        p.push(`<polygon points="${tri[a]}" fill="${heat(ag.Q[s][a], lo, hi)}"/>`);
+      }
+      p.push(`<line class="diag" x1="${cx}" y1="${cy}" x2="${cx + C}" y2="${cy + C}"/>`);
+      p.push(`<line class="diag" x1="${cx + C}" y1="${cy}" x2="${cx}" y2="${cy + C}"/>`);
+      p.push(`<rect class="cellframe" x="${cx}" y="${cy}" width="${C}" height="${C}" rx="6"/>`);
+
+      const g = argmaxIdx(ag.Q[s]);
+      const here = s === ag.pos;
+      if (here) p.push(`<circle class="agent" cx="${mx}" cy="${my}" r="12"/>`);
+
+      if (s === START && !here) {
+        p.push(`<text class="label" x="${cx + 6}" y="${cy + 13}">S</text>`);
+      }
+      p.push(`<text class="arrow${here ? ' on' : ''}" x="${mx}" y="${my + 5}" text-anchor="middle">${ARROW[g]}</text>`);
+
+      if (S.showOpt) {
+        p.push(`<text class="optarrow" x="${cx + 5}" y="${cy + C - 5}">${S.optActions[s].map((a) => ARROW[a]).join('')}</text>`);
+        if (!S.optActions[s].includes(g)) {
+          p.push(`<rect class="bad" x="${cx + 1}" y="${cy + 1}" width="${C - 2}" height="${C - 2}" rx="6"/>`);
+        }
+      }
+      if (here) p.push(`<rect class="here" x="${cx + 1}" y="${cy + 1}" width="${C - 2}" height="${C - 2}" rx="6"/>`);
+    }
+  }
+
+  // 벼랑 띠에 글자를 얹는다
+  const cliffY = (H - 1) * (C + GAP) + C / 2 + 4;
+  const cliffX = ((1 + W - 2) / 2) * (C + GAP) + C / 2;
+  p.push(`<text class="cliffword" x="${cliffX}" y="${cliffY}" text-anchor="middle">벼 랑 · −100</text>`);
+
+  // 맨 위에 투명한 판을 깔아 네 값을 띄운다
+  for (let y = 0; y < H; y++) {
+    for (let x = 0; x < W; x++) {
+      const s = key(y, x);
+      if (isCliff(y, x) || s === GOAL) continue;
+      const q = ag.Q[s].map((v) => v.toFixed(1));
+      const tip = `(${y}, ${x})  ↑${q[0]}  ↓${q[1]}  ←${q[2]}  →${q[3]}`;
+      p.push(`<rect class="hit" x="${x * (C + GAP)}" y="${y * (C + GAP)}" width="${C}" height="${C}"><title>${tip}</title></rect>`);
+    }
+  }
+
+  document.getElementById(mountId).innerHTML =
+    `<svg viewBox="-1 -1 ${w + 2} ${h + 2}" role="img" aria-label="상태·행동 가치 함수 Q">${p.join('')}</svg>`;
+}
+
+/* ---------- 경로 설명 ---------- */
+
+function recentAvg(ag, n) {
+  const h = ag.history;
+  if (!h.length) return null;
+  const from = Math.max(0, h.length - n);
+  let sum = 0;
+  for (let i = from; i < h.length; i++) sum += h[i];
+  return sum / (h.length - from);
+}
+
+function routeText(ag, route) {
+  if (route.fell) {
+    return '<b>탐욕 경로</b> — <span class="risk">벼랑으로 걸어 들어갑니다</span>. 아직 벼랑 칸의 값을 충분히 배우지 못했다는 뜻입니다.';
+  }
+  if (!route.reached) {
+    return '<b>탐욕 경로</b> — <span class="risk">목표에 닿지 못하고 맴돕니다</span>. 아직 배우는 중입니다.';
+  }
+  const steps = route.cells.length - 1;
+  const best = -S.vFlat[START];
+  const hug = route.cells.filter((s) => parse(s)[0] === H - 2 && parse(s)[1] >= 1 && parse(s)[1] <= W - 2).length;
+  const shape = hug >= 8
+    ? '<span class="risk">벼랑에 바짝 붙은 길</span>'
+    : (hug === 0 ? '<span class="safe">벼랑에서 두 줄 이상 떨어진 길</span>' : `벼랑과 맞닿은 줄을 ${hug}칸만 지나는 길`);
+  const gap = steps === best ? ' · <span class="safe">최단</span>' : ` · 최단보다 ${steps - best}걸음 김`;
+  return `<b>탐욕 경로</b> — <b>${steps}걸음</b>${gap} · ${shape}`;
+}
+
+/* ---------- 그래프 ---------- */
+
+const CHART_H = 210;
+const M = { left: 52, right: 16, top: 12, bottom: 34 };
+const Y_LO = -100, Y_HI = 0;
+
+function smoothed(h) {
+  const out = [];
+  let sum = 0;
+  for (let i = 0; i < h.length; i++) {
+    sum += h[i];
+    if (i >= SMOOTH) sum -= h[i - SMOOTH];
+    out.push(sum / Math.min(i + 1, SMOOTH));
+  }
+  return out;
+}
+
+function renderChart() {
+  const box = document.getElementById('chart');
+  const w = Math.max(280, box.clientWidth || 600);
+  const x0 = M.left, x1 = w - M.right, y0 = M.top, y1 = CHART_H - M.bottom;
+
+  const hs = smoothed(S.sarsa.history), hq = smoothed(S.q.history);
+  const N = Math.max(hs.length, hq.length, 100);
+  const xOf = (e) => x0 + (e / N) * (x1 - x0);
+  const yOf = (v) => y1 - ((Math.max(Y_LO, Math.min(Y_HI, v)) - Y_LO) / (Y_HI - Y_LO)) * (y1 - y0);
+
+  const parts = [];
+
+  for (const v of [0, -25, -50, -75, -100]) {
+    const y = yOf(v).toFixed(1);
+    parts.push(`<line class="gridline" x1="${x0}" y1="${y}" x2="${x1}" y2="${y}"/>`);
+    parts.push(`<text x="${x0 - 8}" y="${y}" text-anchor="end" dominant-baseline="middle">${v}</text>`);
+  }
+
+  const bestY = yOf(S.vFlat[START]).toFixed(1);
+  parts.push(`<line class="best" x1="${x0}" y1="${bestY}" x2="${x1}" y2="${bestY}"/>`);
+  parts.push(`<text class="bestlabel" x="${x1 - 4}" y="${Number(bestY) - 5}" text-anchor="end">최적 ${S.vFlat[START]}</text>`);
+
+  const ticks = 5;
+  for (let i = 0; i <= ticks; i++) {
+    const e = Math.round((N / ticks) * i);
+    const x = xOf(e).toFixed(1);
+    parts.push(`<line class="tick" x1="${x}" y1="${y1}" x2="${x}" y2="${y1 + 4}"/>`);
+    parts.push(`<text x="${x}" y="${y1 + 15}" text-anchor="middle">${e.toLocaleString()}</text>`);
+  }
+
+  const polyline = (arr, cls) => {
+    if (arr.length < 2) return '';
+    const stride = Math.max(1, Math.ceil(arr.length / 500));
+    const pts = [];
+    for (let i = 0; i < arr.length; i += stride) pts.push(`${xOf(i + 1).toFixed(1)},${yOf(arr[i]).toFixed(1)}`);
+    const last = arr.length - 1;
+    if ((last % stride) !== 0) pts.push(`${xOf(arr.length).toFixed(1)},${yOf(arr[last]).toFixed(1)}`);
+    return `<polyline class="${cls}" points="${pts.join(' ')}"/>`;
+  };
+
+  parts.push(polyline(hs, 'sline'));
+  parts.push(polyline(hq, 'qline'));
+
+  if (!hs.length && !hq.length) {
+    parts.push(`<text x="${((x0 + x1) / 2).toFixed(1)}" y="${((y0 + y1) / 2).toFixed(1)}" text-anchor="middle">재생을 누르면 여기에 그려집니다</text>`);
+  }
+
+  parts.push(`<rect class="frame" x="${x0}" y="${y0}" width="${x1 - x0}" height="${y1 - y0}"/>`);
+  parts.push(`<text class="axis-name" x="${((x0 + x1) / 2).toFixed(1)}" y="${CHART_H - 4}" text-anchor="middle">에피소드</text>`);
+  parts.push(`<text class="axis-name" transform="rotate(-90 13 ${((y0 + y1) / 2).toFixed(1)})" x="13" y="${((y0 + y1) / 2).toFixed(1)}" text-anchor="middle" dominant-baseline="middle">판당 보상 합</text>`);
+
+  const svg = `<svg viewBox="0 0 ${w} ${CHART_H}" width="${w}" height="${CHART_H}"
+      role="img" aria-label="에피소드에 따른 두 방식의 판당 보상">${parts.join('')}</svg>`;
+
+  const cap = box.querySelector('figcaption');
+  box.innerHTML = '';
+  box.appendChild(cap);
+  box.insertAdjacentHTML('beforeend', svg);
+}
+
+/* ---------- 그리기 묶음 ---------- */
+
+const fmt = (v, d) => (v === null ? '—' : v.toFixed(d === undefined ? 0 : d));
+
+function renderSide(ag, suffix) {
+  const avg = recentAvg(ag, AVG_WINDOW);
+  const learned = Math.max(...ag.Q[START]);
+
+  document.getElementById('ep-' + suffix).textContent = ag.episodes.toLocaleString();
+  document.getElementById('cur-' + suffix).textContent =
+    ag.phase === 'walking' ? ag.sum : (ag.lastSum === null ? '—' : ag.lastSum);
+  document.getElementById('avg-' + suffix).textContent = fmt(avg, 1);
+  document.getElementById('val-' + suffix).textContent = ag.episodes ? learned.toFixed(1) : '—';
+  document.getElementById('fall-' + suffix).textContent = ag.falls.toLocaleString();
+
+  const flag = document.getElementById('flag-' + suffix);
+  if (ag.episodes >= MAX_EPISODES) {
+    flag.textContent = `${MAX_EPISODES.toLocaleString()} 에피소드 완료`;
+    flag.className = 'flag done';
+  } else if (ag.phase === 'walking') {
+    flag.textContent = `걷는 중 · ${ag.steps}걸음째` + (ag.fallsThis ? ` · 벼랑 ${ag.fallsThis}번` : '');
+    flag.className = ag.fallsThis ? 'flag warn' : 'flag';
+  } else if (ag.phase === 'ended') {
+    flag.textContent = ag.truncated ? `${MAX_STEPS}걸음에서 끊음` : '판 종료';
+    flag.className = ag.truncated ? 'flag warn' : 'flag done';
+  } else {
+    flag.textContent = '시작 전';
+    flag.className = 'flag';
+  }
+}
+
+function renderGapNote() {
+  const box = document.getElementById('gap');
+  const as = recentAvg(S.sarsa, AVG_WINDOW), aq = recentAvg(S.q, AVG_WINDOW);
+  if (as === null || aq === null || S.sarsa.episodes < 20) {
+    box.innerHTML = '판을 20번쯤 돌리면 여기에 <b>배운 값</b>과 <b>실제로 받은 보상</b>의 간격이 요약됩니다.';
+    return;
+  }
+  const vs = Math.max(...S.sarsa.Q[START]), vq = Math.max(...S.q.Q[START]);
+  const better = aq > as ? 'Q 러닝' : 'SARSA';
+  box.innerHTML =
+    `<b>Q 러닝</b>은 시작 칸의 값을 <b>${vq.toFixed(1)}</b>로 배웠지만 최근 50판에서 실제로 받은 것은 <b>${aq.toFixed(1)}</b>입니다 ` +
+    `(간격 <b>${(vq - aq).toFixed(1)}</b>). ` +
+    `<b>SARSA</b>는 <b>${vs.toFixed(1)}</b>를 배우고 <b>${as.toFixed(1)}</b>를 받았습니다 (간격 <b>${(vs - as).toFixed(1)}</b>). ` +
+    `— 지금 실제 점수가 더 높은 쪽은 <b>${better}</b>입니다.`;
+}
+
+function render() {
+  // 두 판이 같은 눈금을 쓰도록 함께 잡는다. 아주 낮은 값은 잘라 색이 뭉개지지 않게 한다
+  let hi = -Infinity;
+  for (const ag of agents()) for (const s of VALID) hi = Math.max(hi, ...ag.Q[s]);
+  if (!isFinite(hi)) hi = 0;
+  const lo = hi - 30;
+
+  renderGrid(S.sarsa, 'svg-sarsa', lo, hi, greedyRoute(S.sarsa));
+  renderGrid(S.q, 'svg-q', lo, hi, greedyRoute(S.q));
+  renderSide(S.sarsa, 'sarsa');
+  renderSide(S.q, 'q');
+
+  document.getElementById('route-sarsa').innerHTML = routeText(S.sarsa, greedyRoute(S.sarsa));
+  document.getElementById('route-q').innerHTML = routeText(S.q, greedyRoute(S.q));
+  document.getElementById('scale').textContent = `${lo.toFixed(0)} ~ ${hi.toFixed(0)}`;
+
+  renderGapNote();
+  renderChart();
+}
+
+/* ---------- 재생 ---------- */
+
+let timer = null;
+
+function setPlayLabel() {
+  document.getElementById('play').textContent = S.playing ? '⏸ 일시정지' : '▶ 재생';
+}
+
+function tick() {
+  const { delay, batch } = SPEED[S.speed];
+  for (let i = 0; i < batch; i++) stepBoth();
+  render();
+  if (finished()) { pause(); return; }
+  timer = setTimeout(tick, delay);
+}
+
+function play() {
+  if (S.playing || finished()) return;
+  S.playing = true;
+  setPlayLabel();
+  tick();
+}
+
+function pause() {
+  if (timer !== null) clearTimeout(timer);
+  timer = null;
+  S.playing = false;
+  setPlayLabel();
+}
+
+function toggle() { S.playing ? pause() : play(); }
+
+/* ---------- 이벤트 ---------- */
+
+function bindRange(id, apply) {
+  const input = document.getElementById(id);
+  const out = document.getElementById(id + '-val');
+  input.addEventListener('input', () => {
+    apply(Number(input.value));
+    out.textContent = Number(input.value).toFixed(2);
+    reset();   // 도중에 바꾸면 헷갈리므로 처음부터 다시
+  });
+}
+
+bindRange('epsilon', (v) => { S.epsilon = v; });
+bindRange('alpha', (v) => { S.alpha = v; });
+bindRange('gamma', (v) => { S.gamma = v; });
+
+const seg = document.getElementById('speed');
+seg.addEventListener('click', (e) => {
+  const btn = e.target.closest('button');
+  if (!btn) return;
+  for (const b of seg.querySelectorAll('button')) b.setAttribute('aria-pressed', String(b === btn));
+  S.speed = btn.dataset.v;
+});
+
+document.getElementById('decay').addEventListener('change', (e) => { S.decay = e.target.checked; reset(); });
+document.getElementById('opt').addEventListener('change', (e) => { S.showOpt = e.target.checked; render(); });
+
+document.getElementById('play').addEventListener('click', toggle);
+document.getElementById('step').addEventListener('click', () => { pause(); stepBoth(); render(); });
+document.getElementById('episode').addEventListener('click', () => { pause(); episodeBoth(); render(); });
+document.getElementById('run100').addEventListener('click', () => { pause(); runEpisodes(100); render(); });
+document.getElementById('reset').addEventListener('click', reset);
+
+window.addEventListener('resize', () => renderChart());
+
+document.addEventListener('keydown', (e) => {
+  if (e.code !== 'Space') return;
+  const t = e.target;
+  if (t && (t.tagName === 'INPUT' || t.tagName === 'BUTTON')) return;
+  e.preventDefault();
+  toggle();
+});
+
+reset();
+</script>
+</body>
+</html>
