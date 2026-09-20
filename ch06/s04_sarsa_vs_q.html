@@ -1,0 +1,1095 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>같은 판에서 나란히 배우기 — SARSA와 Q 러닝</title>
+<meta name="description" content="6장 SARSA와 Q 러닝을 같은 그리드 월드에서 동시에 학습시키며 좌우로 견주는 데모. 재생을 누르면 두 에이전트가 함께 걷고, 학습된 경로와 값의 정확도가 갈라지는 모습을 볼 수 있다.">
+<style>
+/* 색과 기본 서식 — docs/style.css 에서 이 화면에 필요한 부분만 옮겨왔다 */
+:root {
+  --bg: #f7f8fa;
+  --surface: #ffffff;
+  --border: #e2e5ea;
+  --text: #1c2024;
+  --text-dim: #5c6570;
+  --text-faint: #8b939d;
+  --accent: #2f6bd8;
+  --accent-soft: #eaf0fc;
+  --answer-bg: #f2f7f1;
+  --done: #3f8f52;
+  --minus: #a63d5c;
+  --shadow: 0 1px 2px rgba(20, 25, 35, .06), 0 1px 8px rgba(20, 25, 35, .04);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #14171b;
+    --surface: #1c2025;
+    --border: #2e343b;
+    --text: #e6e9ec;
+    --text-dim: #a3acb6;
+    --text-faint: #78828d;
+    --accent: #7aa7f0;
+    --accent-soft: #212b3d;
+    --answer-bg: #1b2620;
+    --done: #6fbd82;
+    --minus: #e08fa8;
+    --shadow: 0 1px 2px rgba(0, 0, 0, .3), 0 1px 8px rgba(0, 0, 0, .2);
+  }
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo",
+    "Pretendard", "Malgun Gothic", "Noto Sans KR", sans-serif;
+  font-size: 16px;
+  line-height: 1.7;
+  -webkit-text-size-adjust: 100%;
+}
+
+.wrap { max-width: 860px; margin: 0 auto; padding: 32px 20px 80px; }
+
+a { color: var(--accent); }
+
+code {
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  font-size: .9em;
+  background: var(--accent-soft);
+  padding: .1em .35em;
+  border-radius: 4px;
+}
+
+.masthead { margin-bottom: 28px; }
+.masthead h1 { font-size: 1.65rem; margin: 0 0 6px; letter-spacing: -.02em; }
+.masthead p { margin: 0; color: var(--text-dim); font-size: .93rem; }
+.masthead .lede { margin: 12px 0 0; color: var(--text); font-size: .95rem; max-width: 64ch; }
+
+button {
+  font: inherit;
+  font-size: .85rem;
+  padding: 5px 12px;
+  border-radius: 7px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text-dim);
+  cursor: pointer;
+  transition: border-color .15s, color .15s;
+}
+
+button:hover { border-color: var(--accent); color: var(--accent); }
+
+.footer {
+  margin-top: 56px;
+  padding-top: 20px;
+  border-top: 1px solid var(--border);
+  font-size: .8rem;
+  color: var(--text-faint);
+  line-height: 1.75;
+}
+.footer p { margin: 0 0 6px; }
+</style>
+<style>
+  .panel {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    box-shadow: var(--shadow);
+    padding: 16px 18px;
+    margin-bottom: 16px;
+  }
+
+  /* ---------- 조작부 ---------- */
+
+  .controls { display: flex; flex-wrap: wrap; align-items: center; gap: 14px 20px; }
+
+  .ctl { display: flex; align-items: center; gap: 8px; font-size: .86rem; color: var(--text-dim); }
+
+  .ctl input[type=range] { width: 130px; accent-color: var(--accent); }
+
+  .ctl .val {
+    font-variant-numeric: tabular-nums;
+    font-weight: 700;
+    color: var(--text);
+    min-width: 2.6em;
+  }
+
+  .seg { display: inline-flex; border: 1px solid var(--border); border-radius: 7px; overflow: hidden; }
+  .seg button { border: 0; border-radius: 0; padding: 5px 11px; }
+  .seg button + button { border-left: 1px solid var(--border); }
+  .seg button[aria-pressed="true"] { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+
+  .actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; align-items: center; }
+
+  button.primary {
+    font-size: .92rem;
+    font-weight: 600;
+    padding: 8px 18px;
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #fff;
+  }
+  button.primary:hover { background: var(--accent); color: #fff; filter: brightness(1.08); }
+
+  .hint { font-size: .78rem; color: var(--text-faint); margin-left: auto; }
+
+  /* ---------- 상태 표시 ---------- */
+
+  .stats { display: flex; flex-wrap: wrap; gap: 10px 26px; align-items: baseline; }
+
+  .stat .label { font-size: .74rem; color: var(--text-faint); display: block; letter-spacing: .03em; }
+  .stat .num { font-size: 1.15rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+
+  .flag {
+    font-size: .72rem;
+    font-weight: 700;
+    padding: 2px 9px;
+    border-radius: 20px;
+    background: var(--accent-soft);
+    color: var(--accent);
+  }
+  .flag.done { background: var(--answer-bg); color: var(--done); }
+  .flag.warn { background: rgba(166, 61, 92, .12); color: var(--minus); }
+
+  /* ---------- 그래프 ---------- */
+
+  .chart { margin: 18px 0 0; }
+
+  .chart figcaption { font-size: .78rem; color: var(--text-faint); margin-bottom: 8px; }
+
+  .chart svg { display: block; width: 100%; }
+
+  .chart .frame { fill: none; stroke: var(--border); stroke-width: 1; }
+  .chart .gridline { stroke: var(--border); stroke-dasharray: 2 3; opacity: .8; }
+  .chart .tick { stroke: var(--border); }
+
+  .chart text {
+    fill: var(--text-faint);
+    font-size: 10.5px;
+    font-variant-numeric: tabular-nums;
+  }
+  .chart .axis-name { fill: var(--text-dim); }
+
+  .chart .line { fill: none; stroke: var(--accent); stroke-width: 1.7; stroke-linejoin: round; }
+  .chart .dot { fill: var(--accent); }
+  .chart .match { fill: none; stroke: var(--done); stroke-width: 1.4; stroke-linejoin: round; opacity: .85; }
+  .chart .match-axis { fill: var(--done); }
+  .chart .full { stroke: var(--done); stroke-width: 1; stroke-dasharray: 5 3; opacity: .55; }
+
+  /* ---------- Q 그리드 ---------- */
+
+  .qgrid svg { display: block; width: 100%; height: auto; }
+  .qgrid .cellframe { fill: none; stroke: var(--border); stroke-width: 1.4; }
+  .qgrid .diag { stroke: var(--border); stroke-width: .8; }
+  .qgrid .qtext { font-size: 10px; fill: var(--text-dim); font-variant-numeric: tabular-nums; }
+  .qgrid .coord { font-size: 9px; fill: var(--text-faint); font-variant-numeric: tabular-nums; }
+  .qgrid .tagp { font-size: 10px; font-weight: 700; fill: var(--done); }
+  .qgrid .tagm { font-size: 10px; font-weight: 700; fill: var(--minus); }
+  .qgrid .arrow { font-size: 17px; fill: var(--text); font-weight: 700; }
+  .qgrid .arrow.on { fill: #fff; }
+  .qgrid .optarrow { font-size: 11px; fill: var(--text-faint); }
+  .qgrid .vstar { font-size: 9px; fill: var(--text-faint); font-variant-numeric: tabular-nums; }
+  .qgrid .wall { fill: var(--border); }
+  .qgrid .goal { fill: var(--answer-bg); }
+  .qgrid .label { font-size: 11px; fill: var(--text-dim); }
+  .qgrid .path { fill: none; stroke: var(--accent); stroke-width: 1.6; stroke-dasharray: 4 3; }
+  .qgrid .here { fill: none; stroke: var(--accent); stroke-width: 2.4; }
+  .qgrid .bad { fill: none; stroke: var(--minus); stroke-width: 2.4; }
+  .qgrid .agent { fill: var(--accent); }
+
+  .legend {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: .76rem;
+    color: var(--text-faint);
+    margin-top: 12px;
+  }
+  .legend .bar {
+    flex: 1;
+    height: 8px;
+    border-radius: 4px;
+    background: linear-gradient(90deg,
+      rgba(190, 70, 80, .45), rgba(190, 70, 80, 0), rgba(47, 107, 216, 0), rgba(47, 107, 216, .45));
+  }
+  .legend-note { font-size: .78rem; color: var(--text-faint); margin: 8px 0 0; }
+
+  /* ---------- 갱신 표 ---------- */
+
+  .replay h2 { font-size: .95rem; margin: 0 0 4px; }
+  .replay .sub { font-size: .8rem; color: var(--text-faint); margin: 0 0 12px; }
+
+  table.terms { width: 100%; border-collapse: collapse; font-size: .82rem; font-variant-numeric: tabular-nums; }
+  table.terms th, table.terms td { padding: 5px 7px; border-bottom: 1px solid var(--border); text-align: right; }
+  table.terms th { color: var(--text-faint); font-weight: 600; font-size: .74rem; letter-spacing: .02em; }
+  table.terms th:first-child, table.terms td:first-child { text-align: left; }
+  table.terms tr:last-child td { border-bottom: 0; }
+  table.terms tr.dead td { color: var(--text-faint); }
+  table.terms tr.dead td.rho { color: var(--minus); font-weight: 700; }
+  table.terms td .arrow { color: var(--text-faint); padding: 0 3px; }
+  table.terms tr.head-sep td { border-bottom: 2px solid var(--border); }
+
+  .note { font-size: .84rem; color: var(--text-dim); margin: 10px 0 0; }
+  .note code { font-size: .86em; }
+
+  details.about summary { cursor: pointer; font-size: .9rem; font-weight: 600; }
+  details.about > div { margin-top: 10px; font-size: .88rem; color: var(--text-dim); }
+  details.about ul { margin: 8px 0 0; padding-left: 20px; }
+  details.about li { margin-bottom: 5px; }
+
+  @media (max-width: 520px) {
+    .ctl input[type=range] { width: 100px; }
+    table.terms th, table.terms td { padding: 4px 3px; font-size: .72rem; }
+  }
+</style>
+<style>
+  /* 이 화면에만 필요한 것 — 두 판을 좌우로 놓고, 학습된 경로를 덧그린다 */
+
+  .duo { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+  .duo .panel { margin-bottom: 0; }
+
+  .side h2 { font-size: 1.02rem; margin: 0 0 2px; }
+  .side .algo {
+    font-size: .76rem;
+    color: var(--text-faint);
+    margin: 0 0 12px;
+    font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  }
+  .side .stats { gap: 8px 18px; margin-bottom: 12px; }
+  .side .stat .num { font-size: 1.02rem; }
+
+  .route {
+    margin: 12px 0 0;
+    font-size: .82rem;
+    color: var(--text-dim);
+    border-top: 1px solid var(--border);
+    padding-top: 10px;
+  }
+  .route b { color: var(--text); }
+  .route .risk { color: var(--minus); font-weight: 700; }
+  .route .safe { color: var(--done); font-weight: 700; }
+
+  .qgrid .routeline {
+    fill: none;
+    stroke: var(--accent);
+    stroke-width: 11;
+    stroke-opacity: .3;
+    stroke-linejoin: round;
+    stroke-linecap: round;
+  }
+  .qgrid .routestart { fill: none; stroke: var(--accent); stroke-width: 1.6; stroke-dasharray: 4 3; }
+  .qgrid .hit { fill: #fff; fill-opacity: 0; cursor: pointer; }
+
+  .chart .qline { fill: none; stroke: var(--accent); stroke-width: 1.7; stroke-linejoin: round; }
+  .chart .sline { fill: none; stroke: var(--minus); stroke-width: 1.7; stroke-linejoin: round; }
+  .k-s { color: var(--minus); font-weight: 700; }
+  .k-q { color: var(--accent); font-weight: 700; }
+
+  .speed { display: inline-flex; gap: 0; }
+
+  @media (max-width: 760px) {
+    .duo { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="masthead">
+    <h1>같은 판에서 나란히 배우기</h1>
+    <p>6장 · <code>s02_sarsa.py</code>와 <code>s04_q_learning.py</code>를 같은 그리드 월드에서 동시에</p>
+    <p class="lede">두 에이전트가 같은 환경에서 나란히 걷습니다. 갱신식은 <b>다음 상태의 값을 무엇으로 쓰는가</b> 한 군데만 다른데, 그 한 군데가 <b>어느 칸까지 제대로 배우는지</b>를 갈라놓습니다.</p>
+  </header>
+
+  <section class="panel">
+    <div class="controls">
+      <label class="ctl">
+        할인율 γ
+        <input id="gamma" type="range" min="0.5" max="0.99" step="0.01" value="0.9">
+        <span class="val" id="gamma-val">0.90</span>
+      </label>
+
+      <label class="ctl">
+        ε
+        <input id="epsilon" type="range" min="0.02" max="0.6" step="0.01" value="0.1">
+        <span class="val" id="epsilon-val">0.10</span>
+      </label>
+
+      <label class="ctl">
+        α
+        <input id="alpha" type="range" min="0.05" max="1" step="0.05" value="0.8">
+        <span class="val" id="alpha-val">0.80</span>
+      </label>
+
+      <span class="ctl">
+        재생 속도
+        <span class="seg speed" id="speed">
+          <button type="button" data-v="slow" aria-pressed="false">느리게</button>
+          <button type="button" data-v="normal" aria-pressed="true">보통</button>
+          <button type="button" data-v="fast" aria-pressed="false">빠르게</button>
+          <button type="button" data-v="max" aria-pressed="false">최대</button>
+        </span>
+      </span>
+
+      <label class="ctl"><input id="opt" type="checkbox"> 4장 최적 정책과 견주기</label>
+      <label class="ctl"><input id="route" type="checkbox" checked> 학습된 경로 덧그리기</label>
+    </div>
+
+    <div class="actions">
+      <button type="button" class="primary" id="play">▶ 재생</button>
+      <button type="button" id="step">한 걸음</button>
+      <button type="button" id="episode">한 에피소드</button>
+      <button type="button" id="run100">100 에피소드</button>
+      <button type="button" id="reset">초기화</button>
+      <span class="hint">스페이스바로 재생·일시정지</span>
+    </div>
+  </section>
+
+  <section class="duo">
+    <div class="panel side qgrid" id="side-sarsa">
+      <h2>SARSA <span class="flag" id="flag-sarsa">시작 전</span></h2>
+      <p class="algo">Q(s,a) ← Q(s,a) + α{ R + γ·Q(s′, A′) − Q(s,a) }</p>
+      <div class="stats">
+        <span class="stat"><span class="label">에피소드</span><span class="num" id="ep-sarsa">0</span></span>
+        <span class="stat"><span class="label">이번 판 걸음</span><span class="num" id="len-sarsa">—</span></span>
+        <span class="stat"><span class="label">최적 행동 일치</span><span class="num" id="match-sarsa">—</span></span>
+        <span class="stat"><span class="label">max|max Q − v*|</span><span class="num" id="err-sarsa">—</span></span>
+      </div>
+      <div id="svg-sarsa"></div>
+      <p class="route" id="route-sarsa"></p>
+    </div>
+
+    <div class="panel side qgrid" id="side-q">
+      <h2>Q 러닝 <span class="flag" id="flag-q">시작 전</span></h2>
+      <p class="algo">Q(s,a) ← Q(s,a) + α{ R + γ·max<sub>a</sub>Q(s′, a) − Q(s,a) }</p>
+      <div class="stats">
+        <span class="stat"><span class="label">에피소드</span><span class="num" id="ep-q">0</span></span>
+        <span class="stat"><span class="label">이번 판 걸음</span><span class="num" id="len-q">—</span></span>
+        <span class="stat"><span class="label">최적 행동 일치</span><span class="num" id="match-q">—</span></span>
+        <span class="stat"><span class="label">max|max Q − v*|</span><span class="num" id="err-q">—</span></span>
+      </div>
+      <div id="svg-q"></div>
+      <p class="route" id="route-q"></p>
+    </div>
+  </section>
+
+  <section class="panel" style="margin-top:16px">
+    <div class="legend" style="margin-top:0">
+      <span>낮음</span><span class="bar"></span><span>높음</span>
+      <span id="scale" style="margin-left:6px"></span>
+    </div>
+    <p class="legend-note">칸마다 네 방향의 Q(s, a)를 삼각형으로 나눠 그렸습니다. 가운데 화살표는 지금 Q를 탐욕화한 행동, 파란 원은 에이전트의 자리, 옅은 파란 띠는 <b>그 탐욕 행동만 따라갔을 때의 길</b>입니다. 칸을 누르면 그 칸에서 출발하는 길로 바꿔 그립니다 — 기본은 시작 칸 (2, 0)이고, <b>아래쪽 줄의 칸(특히 (2, 3))</b>을 누르면 두 방식의 차이가 잘 드러납니다.</p>
+
+    <figure class="chart" id="chart">
+      <figcaption><span class="k-s">붉은색 SARSA</span> · <span class="k-q">파란색 Q 러닝</span> — 에피소드에 따른 값의 오차 max|max<sub>a</sub>Q − v*| (로그)</figcaption>
+    </figure>
+  </section>
+
+  <section class="panel">
+    <details class="about">
+      <summary>이 화면이 계산하는 것</summary>
+      <div>
+        <p style="margin:0">
+          4장과 같은 3×4 그리드 월드를 <b>두 벌</b> 돌립니다. 왼쪽은 <code>s02_sarsa.py</code>,
+          오른쪽은 <code>s04_q_learning.py</code>이고, γ·ε·α는 같은 값을 씁니다.
+          한 번의 「한 걸음」에 두 에이전트가 각각 한 걸음씩 걸으므로, 같은 경험량을 놓고 견주게 됩니다.
+          걷는 길은 각자의 정책이 정하므로 서로 다릅니다.
+        </p>
+        <ul>
+          <li><b>SARSA는 자기 자신을 평가합니다.</b> 다음 상태의 값으로 <b>실제로 고른</b> A′의 Q를 씁니다. A′는 ε의 확률로 엉뚱한 방향이므로, '10번에 1번 헤매다 폭탄에 빠지는' 손해까지 Q에 배어듭니다. 평가 대상이 v*가 아니라 v<sub>ε-탐욕</sub>인 것입니다.</li>
+          <li><b>Q 러닝은 최선을 가정합니다.</b> 다음 상태의 값으로 <code>max<sub>a</sub>Q(s′,a)</code>를 쓰므로 헤매다 잃는 몫이 목표값에 들어가지 않습니다. 벨만 최적 방정식의 샘플 버전이라 q* 자체로 수렴합니다.</li>
+          <li><b>목표로 가는 주 경로는 둘 다 금방 같아집니다.</b> 시작 칸 (2, 0)에서는 두 판 모두 위쪽 줄을 따라 5걸음에 도착합니다. 차이는 <b>자주 가지 않는 칸</b>에서 드러나므로, 아래쪽 줄의 칸을 눌러 그 칸에서 출발하는 길을 견주어 보세요. Q 러닝은 어느 칸에서 출발해도 최단이지만, SARSA는 아래쪽 줄의 방향이 흔들리고 <b>제자리를 맴도는 일도 잦습니다</b>.</li>
+          <li>그 흔들림이 어디인지는 <b>4장 최적과 어긋난 칸</b> 줄에 그대로 적힙니다. 여러 번 초기화해 돌려보면 Q 러닝은 매번 '없음'인데 SARSA는 아래쪽 줄의 두세 칸이 번갈아 걸립니다. 폭탄에서 멀어지는 방향(↓, ←)이 자주 나오는 것이 [그림 6-7]에서 본 성격입니다.</li>
+          <li>값의 오차를 보면 차이가 가장 분명합니다. Q 러닝은 <b>0.00</b>까지 내려가 4장 DP가 모델을 보고 계산한 값과 정확히 일치하지만, SARSA는 <b>0.5 근처에서 멈춥니다</b>. 표본이 모자라서가 아니라 애초에 다른 것을 평가하고 있기 때문입니다.</li>
+          <li>「4장 최적 정책과 견주기」를 켜면 각 칸에 v*와 최적 행동(회색 화살표)이 뜨고, 탐욕 행동이 최적이 아닌 칸은 붉은 테두리로 표시됩니다. 두 판의 붉은 테두리가 어디에 몰리는지 견주어 보세요.</li>
+          <li>SARSA는 A′가 정해져야 갱신할 수 있어 <b>한 걸음 늦게</b> 배웁니다(<code>deque(maxlen=2)</code>). 목표에 닿으면 더미 데이터를 한 번 더 밀어 넣어 마지막 (S, A)까지 갱신합니다. Q 러닝에는 그 대기가 없습니다.</li>
+          <li>한 걸음씩 돌아가는 모습을 보려면 <b>느리게</b>, 수렴까지 보려면 <b>최대</b>로 두고 재생하세요. 10,000 에피소드에 닿으면 자동으로 멈춥니다.</li>
+          <li>γ·ε·α를 바꾸면 양쪽 모두 처음부터 다시 시작합니다.</li>
+        </ul>
+      </div>
+    </details>
+  </section>
+
+  <footer class="footer">
+    <p>
+      예제 코드 저장소:
+      <a href="https://github.com/sajacaros/deep-learning-from-scratch-4" target="_blank" rel="noopener noreferrer">sajacaros/deep-learning-from-scratch-4</a>
+      · 원저작 코드
+      <a href="https://github.com/WegraLee/deep-learning-from-scratch-4" target="_blank" rel="noopener noreferrer">WegraLee/deep-learning-from-scratch-4</a>
+    </p>
+  </footer>
+
+</div>
+<script>
+/* 6장 SARSA 대 Q 러닝 — s02_sarsa.py 와 s04_q_learning.py 를 같은 환경에서 동시에 돌린다.
+   두 에이전트는 각자의 판에서 각자의 정책으로 걷고, 한 번의 틱에 한 걸음씩 나아간다. */
+
+const H = 3, W = 4;
+const REWARD = [
+  [0, 0, 0, 1.0],
+  [0, null, 0, -1.0],
+  [0, 0, 0, 0],
+];
+const GOAL = '0,3';
+const WALL = '1,1';
+const BOMB = '1,3';
+const START = '2,0';
+const NEAR_BOMB = ['1,2', '2,3'];     // 폭탄과 맞닿은 칸 (목표 칸은 뺀다)
+const MOVES = [[-1, 0], [1, 0], [0, -1], [0, 1]];
+const ARROW = ['↑', '↓', '←', '→'];
+const MAX_STEPS = 2000;               // 맴도는 판을 끊는 안전장치
+const MAX_EPISODES = 10000;
+const ROUTE_CAP = 40;
+
+const key = (y, x) => y + ',' + x;
+const parse = (s) => s.split(',').map(Number);
+
+const ORDER = [];
+for (let y = 0; y < H; y++) {
+  for (let x = 0; x < W; x++) {
+    if (key(y, x) !== WALL) ORDER.push(key(y, x));
+  }
+}
+const VALID = ORDER.filter((s) => s !== GOAL);
+
+function nextState(y, x, a) {
+  const ny = y + MOVES[a][0], nx = x + MOVES[a][1];
+  if (nx < 0 || nx >= W || ny < 0 || ny >= H) return [y, x];
+  if (key(ny, nx) === WALL) return [y, x];
+  return [ny, nx];
+}
+
+/* ---------- 정책 ---------- */
+
+function argmaxIdx(qs, tie) {
+  let m = -Infinity;
+  for (const q of qs) if (q > m) m = q;
+  const idx = [];
+  for (let a = 0; a < 4; a++) if (qs[a] === m) idx.push(a);
+  return (tie === 'random' && idx.length > 1) ? idx[Math.floor(Math.random() * idx.length)] : idx[0];
+}
+
+function greedyProbs(qs, epsilon) {
+  const best = argmaxIdx(qs, 'random');
+  const base = epsilon / 4;
+  const probs = [base, base, base, base];
+  probs[best] += 1 - epsilon;
+  return probs;
+}
+
+function sampleAction(probs) {
+  let u = Math.random(), acc = 0;
+  for (let a = 0; a < 4; a++) {
+    acc += probs[a];
+    if (u < acc) return a;
+  }
+  return 3;
+}
+
+/* ---------- 견줄 기준: 4장 가치 반복법 ---------- */
+
+function valueIteration(gamma) {
+  const V = {};
+  for (const s of ORDER) V[s] = 0;
+  V[WALL] = 0;
+  for (let iter = 0; iter < 100000; iter++) {
+    let delta = 0;
+    for (const s of ORDER) {
+      if (s === GOAL) continue;
+      const [y, x] = parse(s);
+      let best = -Infinity;
+      for (let a = 0; a < 4; a++) {
+        const [ny, nx] = nextState(y, x, a);
+        best = Math.max(best, REWARD[ny][nx] + gamma * V[key(ny, nx)]);
+      }
+      delta = Math.max(delta, Math.abs(best - V[s]));
+      V[s] = best;
+    }
+    if (delta < 1e-13) break;
+  }
+  return V;
+}
+
+function optimalActions(V, gamma) {
+  const opt = {};
+  for (const s of VALID) {
+    const [y, x] = parse(s);
+    const qs = [];
+    for (let a = 0; a < 4; a++) {
+      const [ny, nx] = nextState(y, x, a);
+      qs.push(REWARD[ny][nx] + gamma * V[key(ny, nx)]);
+    }
+    const best = Math.max(...qs);
+    opt[s] = qs.map((q, a) => (q > best - 1e-9 ? a : -1)).filter((a) => a >= 0);
+  }
+  return opt;
+}
+
+/* ---------- 두 에이전트 ---------- */
+
+function makeAgent(mode) {
+  const ag = {
+    mode,                 // 'sarsa' | 'q'
+    Q: {}, pi: {}, b: {},
+    memory: [],           // deque(maxlen=2) — SARSA 만 쓴다
+    visits: {},
+    pos: null,
+    phase: 'idle',        // 'idle' | 'walking' | 'ended'
+    episodes: 0,
+    stepsInEpisode: 0,
+    lastLen: null,
+    truncated: false,
+    history: [],
+  };
+  for (const s of ORDER) {
+    ag.Q[s] = [0, 0, 0, 0];
+    ag.pi[s] = [0.25, 0.25, 0.25, 0.25];
+    ag.b[s] = [0.25, 0.25, 0.25, 0.25];
+  }
+  return ag;
+}
+
+const S = {
+  gamma: 0.9,
+  epsilon: 0.1,
+  alpha: 0.8,
+  speed: 'normal',
+  showOpt: false,
+  showRoute: true,
+  routeFrom: START,
+  playing: false,
+  sarsa: null,
+  q: null,
+  vStar: null,
+  optActions: null,
+};
+
+const SPEED = {
+  slow: { delay: 420, batch: 1 },
+  normal: { delay: 120, batch: 1 },
+  fast: { delay: 30, batch: 3 },
+  max: { delay: 16, batch: 80 },
+};
+
+function agents() { return [S.sarsa, S.q]; }
+
+function reset() {
+  pause();
+  S.vStar = valueIteration(S.gamma);
+  S.optActions = optimalActions(S.vStar, S.gamma);
+  S.sarsa = makeAgent('sarsa');
+  S.q = makeAgent('q');
+  render();
+}
+
+function greedyAction(ag, s) { return argmaxIdx(ag.Q[s], 'first'); }
+
+function measure(ag) {
+  let err = 0, match = 0;
+  for (const s of VALID) {
+    const maxQ = Math.max(...ag.Q[s]);
+    err = Math.max(err, Math.abs(maxQ - S.vStar[s]));
+    if (S.optActions[s].includes(greedyAction(ag, s))) match++;
+  }
+  return { err, match };
+}
+
+/* ---------- 한 걸음 ---------- */
+
+function beginEpisode(ag) {
+  ag.pos = START;
+  ag.memory = [];
+  ag.visits = {};
+  ag.stepsInEpisode = 0;
+  ag.truncated = false;
+  ag.phase = 'walking';
+}
+
+function pickAction(ag, s) {
+  return sampleAction(ag.mode === 'sarsa' ? ag.pi[s] : ag.b[s]);
+}
+
+function improve(ag, s) {
+  if (ag.mode === 'sarsa') {
+    ag.pi[s] = greedyProbs(ag.Q[s], S.epsilon);     // 평가 대상이 곧 행동 정책
+  } else {
+    ag.pi[s] = greedyProbs(ag.Q[s], 0);             // 대상 정책: 순수 탐욕
+    ag.b[s] = greedyProbs(ag.Q[s], S.epsilon);      // 행동 정책: ε-탐욕
+  }
+}
+
+/* SarsaAgent.update() — memory 가 둘 찼을 때만 */
+function sarsaUpdate(ag) {
+  if (ag.memory.length < 2) return;
+  const m0 = ag.memory[0], m1 = ag.memory[1];
+  const nextQ = m0.done ? 0 : ag.Q[m1.s][m1.a];
+  const target = m0.r + S.gamma * nextQ;
+  ag.Q[m0.s][m0.a] += (target - ag.Q[m0.s][m0.a]) * S.alpha;
+  improve(ag, m0.s);
+}
+
+/* QLearningAgent.update() — 한 걸음 안에서 끝난다 */
+function qUpdate(ag, s, a, r, ns, done) {
+  const nextMax = done ? 0 : Math.max(...ag.Q[ns]);
+  const target = r + S.gamma * nextMax;
+  ag.Q[s][a] += (target - ag.Q[s][a]) * S.alpha;
+  improve(ag, s);
+}
+
+function finishEpisode(ag) {
+  ag.episodes++;
+  ag.lastLen = ag.stepsInEpisode;
+  ag.history.push(measure(ag));
+  ag.phase = 'ended';
+  ag.pos = null;
+}
+
+function walkOneStep(ag) {
+  if (ag.episodes >= MAX_EPISODES && ag.phase !== 'walking') return true;
+  if (ag.phase !== 'walking') beginEpisode(ag);
+
+  const s = ag.pos;
+  const a = pickAction(ag, s);
+  const [y, x] = parse(s);
+  const [ny, nx] = nextState(y, x, a);
+  const ns = key(ny, nx);
+  const r = REWARD[ny][nx] ?? 0;
+  const done = ns === GOAL;
+
+  ag.visits[s] = (ag.visits[s] || 0) + 1;
+  const t = ag.stepsInEpisode;
+  ag.stepsInEpisode++;
+
+  if (ag.mode === 'q') {
+    qUpdate(ag, s, a, r, ns, done);
+    if (done) { finishEpisode(ag); return true; }
+  } else {
+    ag.memory.push({ t, s, a, r, done });
+    if (ag.memory.length > 2) ag.memory.shift();
+    sarsaUpdate(ag);
+    if (done) {
+      // 목표에 도달했을 때도 한 번 더 — 마지막 (S, A) 를 갱신하기 위한 더미
+      ag.memory.push({ t: t + 1, s: ns, a: null, r: null, done: null });
+      if (ag.memory.length > 2) ag.memory.shift();
+      sarsaUpdate(ag);
+      finishEpisode(ag);
+      return true;
+    }
+  }
+
+  if (ag.stepsInEpisode >= MAX_STEPS) {
+    ag.truncated = true;
+    finishEpisode(ag);
+    return true;
+  }
+  ag.pos = ns;
+  return false;
+}
+
+function stepBoth() {
+  for (const ag of agents()) walkOneStep(ag);
+}
+
+function episodeBoth() {
+  for (const ag of agents()) {
+    let guard = 0;
+    while (!walkOneStep(ag) && guard++ < MAX_STEPS + 5) { /* 한 판 */ }
+  }
+}
+
+function runEpisodes(count) {
+  for (let k = 0; k < count; k++) episodeBoth();
+}
+
+function finished() { return agents().every((ag) => ag.episodes >= MAX_EPISODES); }
+
+/* ---------- 학습된 경로 ---------- */
+
+function greedyRoute(ag, from) {
+  const cells = [from];
+  const seen = new Set();
+  let s = from;
+  for (let i = 0; i < ROUTE_CAP; i++) {
+    if (s === GOAL) return { cells, reached: true, looped: false };
+    if (seen.has(s)) return { cells, reached: false, looped: true };
+    seen.add(s);
+    const a = greedyAction(ag, s);
+    const [y, x] = parse(s);
+    const [ny, nx] = nextState(y, x, a);
+    const ns = key(ny, nx);
+    if (ns === s) return { cells, reached: false, looped: true };   // 제자리걸음
+    cells.push(ns);
+    s = ns;
+  }
+  return { cells, reached: false, looped: true };
+}
+
+/* ---------- 그리드 그리기 ---------- */
+
+const C = 100, GAP = 8;
+
+function heat(v, scale) {
+  if (scale < 1e-9) return 'transparent';
+  const t = Math.max(-1, Math.min(1, v / scale));
+  const a = (Math.abs(t) * 0.45).toFixed(3);
+  return t >= 0 ? `rgba(47, 107, 216, ${a})` : `rgba(190, 70, 80, ${a})`;
+}
+
+function center(s) {
+  const [y, x] = parse(s);
+  return [x * (C + GAP) + C / 2, y * (C + GAP) + C / 2];
+}
+
+function renderGrid(ag, mountId, scale, route) {
+  const w = W * C + (W - 1) * GAP, h = H * C + (H - 1) * GAP;
+  const p = [];
+
+  // 경로는 삼각형 아래에 깔아 화살표를 가리지 않게 한다
+  if (S.showRoute && route.cells.length > 1) {
+    const pts = route.cells.map((s) => center(s).map((v) => v.toFixed(1)).join(',')).join(' ');
+    p.push(`<polyline class="routeline" points="${pts}"/>`);
+  }
+
+  for (let y = 0; y < H; y++) {
+    for (let x = 0; x < W; x++) {
+      const s = key(y, x);
+      const cx = x * (C + GAP), cy = y * (C + GAP);
+      const mx = cx + C / 2, my = cy + C / 2;
+
+      if (s === WALL) {
+        p.push(`<rect class="wall" x="${cx}" y="${cy}" width="${C}" height="${C}" rx="7"/>`);
+        p.push(`<text class="label" x="${mx}" y="${my + 4}" text-anchor="middle">벽</text>`);
+        continue;
+      }
+      if (s === GOAL) {
+        p.push(`<rect class="goal" x="${cx}" y="${cy}" width="${C}" height="${C}" rx="7"/>`);
+        p.push(`<rect class="cellframe" x="${cx}" y="${cy}" width="${C}" height="${C}" rx="7"/>`);
+        p.push(`<text class="coord" x="${cx + 7}" y="${cy + 14}">(${y}, ${x})</text>`);
+        p.push(`<text class="tagp" x="${cx + C - 7}" y="${cy + 14}" text-anchor="end">+1</text>`);
+        p.push(`<text class="label" x="${mx}" y="${my + 4}" text-anchor="middle">목표</text>`);
+        continue;
+      }
+
+      const tri = [
+        `${mx},${my} ${cx + C},${cy} ${cx},${cy}`,
+        `${cx},${cy + C} ${cx + C},${cy + C} ${mx},${my}`,
+        `${cx},${cy} ${mx},${my} ${cx},${cy + C}`,
+        `${mx},${my} ${cx + C},${cy} ${cx + C},${cy + C}`,
+      ];
+      const tx = [[mx, cy + 0.26 * C], [mx, cy + 0.88 * C], [cx + 0.17 * C, my + 3], [cx + 0.83 * C, my + 3]];
+      for (let a = 0; a < 4; a++) {
+        p.push(`<polygon points="${tri[a]}" fill="${heat(ag.Q[s][a], scale)}"/>`);
+      }
+      p.push(`<line class="diag" x1="${cx}" y1="${cy}" x2="${cx + C}" y2="${cy + C}"/>`);
+      p.push(`<line class="diag" x1="${cx + C}" y1="${cy}" x2="${cx}" y2="${cy + C}"/>`);
+      for (let a = 0; a < 4; a++) {
+        p.push(`<text class="qtext" x="${tx[a][0]}" y="${tx[a][1]}" text-anchor="middle">${ag.Q[s][a].toFixed(2)}</text>`);
+      }
+
+      p.push(`<rect class="cellframe" x="${cx}" y="${cy}" width="${C}" height="${C}" rx="7"/>`);
+      p.push(`<text class="coord" x="${cx + 7}" y="${cy + 14}">(${y}, ${x})</text>`);
+
+      const r = REWARD[y][x];
+      if (r) {
+        p.push(`<text class="${r > 0 ? 'tagp' : 'tagm'}" x="${cx + C - 7}" y="${cy + 14}" text-anchor="end">${r > 0 ? '+1' : '−1'}</text>`);
+      }
+
+      const g = greedyAction(ag, s);
+      const here = s === ag.pos;
+      if (here) p.push(`<circle class="agent" cx="${mx}" cy="${my}" r="13"/>`);
+      p.push(`<text class="arrow${here ? ' on' : ''}" x="${mx}" y="${my + 6}" text-anchor="middle">${ARROW[g]}</text>`);
+
+      if (S.showOpt) {
+        const opts = S.optActions[s].map((a) => ARROW[a]).join('');
+        p.push(`<text class="optarrow" x="${cx + 7}" y="${cy + C - 7}">${opts}</text>`);
+        p.push(`<text class="vstar" x="${cx + C - 7}" y="${cy + C - 7}" text-anchor="end">v* ${S.vStar[s].toFixed(2)}</text>`);
+        if (!S.optActions[s].includes(g)) {
+          p.push(`<rect class="bad" x="${cx + 1}" y="${cy + 1}" width="${C - 2}" height="${C - 2}" rx="7"/>`);
+        }
+      }
+
+      if (here) p.push(`<rect class="here" x="${cx + 1}" y="${cy + 1}" width="${C - 2}" height="${C - 2}" rx="7"/>`);
+      else if (ag.visits[s]) p.push(`<rect class="path" x="${cx + 2}" y="${cy + 2}" width="${C - 4}" height="${C - 4}" rx="6"/>`);
+      if (S.showRoute && s === S.routeFrom) {
+        p.push(`<rect class="routestart" x="${cx + 4}" y="${cy + 4}" width="${C - 8}" height="${C - 8}" rx="6"/>`);
+      }
+    }
+  }
+
+  // 맨 위에 투명한 판을 깔아 칸을 누를 수 있게 한다
+  for (let y = 0; y < H; y++) {
+    for (let x = 0; x < W; x++) {
+      const s = key(y, x);
+      if (s === WALL || s === GOAL) continue;
+      p.push(`<rect class="hit" data-s="${s}" x="${x * (C + GAP)}" y="${y * (C + GAP)}" width="${C}" height="${C}" rx="7"><title>(${y}, ${x})에서 출발하는 길 보기</title></rect>`);
+    }
+  }
+
+  document.getElementById(mountId).innerHTML =
+    `<svg viewBox="-1 -1 ${w + 2} ${h + 2}" role="img" aria-label="상태·행동 가치 함수 Q">${p.join('')}</svg>`;
+}
+
+/* ---------- 경로 설명 ---------- */
+
+const cellName = (s) => { const [y, x] = parse(s); return `(${y}, ${x})`; };
+
+/* 최적 경로의 길이 — 4장 v* 로 재는 눈금 */
+function optimalSteps(from) {
+  let s = from;
+  for (let i = 0; i < ROUTE_CAP; i++) {
+    if (s === GOAL) return i;
+    const a = S.optActions[s][0];
+    const [y, x] = parse(s);
+    const [ny, nx] = nextState(y, x, a);
+    s = key(ny, nx);
+  }
+  return null;
+}
+
+function sideText(ag, route) {
+  const from = cellName(S.routeFrom);
+  const best = optimalSteps(S.routeFrom);
+
+  let first;
+  if (!route.reached) {
+    first = `<b>학습된 경로</b> — ${from}에서 탐욕 행동만 따라가면 <span class="risk">목표에 닿지 못하고 맴돕니다</span>. ` +
+      '이 근처 칸의 Q를 아직 제대로 배우지 못했다는 뜻입니다.';
+  } else {
+    const steps = route.cells.length - 1;
+    const near = route.cells.filter((s) => NEAR_BOMB.includes(s));
+    const risk = near.length
+      ? `폭탄과 맞닿은 칸 ${near.map(cellName).join('·')}를 지남`
+      : '<span class="safe">폭탄과 맞닿은 칸을 지나지 않음</span>';
+    const gap = best === null ? ''
+      : (steps === best ? ' · <span class="safe">최단</span>' : ` · <span class="risk">최단보다 ${steps - best}걸음 김</span>`);
+    first = `<b>학습된 경로</b> — ${from}에서 <b>${steps}걸음</b>${gap} · ${risk}`;
+  }
+
+  const wrong = VALID.filter((s) => !S.optActions[s].includes(greedyAction(ag, s)));
+  const second = wrong.length
+    ? `<b>4장 최적과 어긋난 칸</b> — <span class="risk">${wrong.map(cellName).join(' · ')}</span>`
+    : '<b>4장 최적과 어긋난 칸</b> — <span class="safe">없음 (10칸 모두 일치)</span>';
+
+  return first + '<br>' + second;
+}
+
+/* ---------- 그래프 ---------- */
+
+const CHART_H = 190;
+const M = { left: 60, right: 20, top: 12, bottom: 34 };
+
+function renderChart() {
+  const box = document.getElementById('chart');
+  const hs = S.sarsa.history, hq = S.q.history;
+
+  const w = Math.max(280, box.clientWidth || 600);
+  const x0 = M.left, x1 = w - M.right, y0 = M.top, y1 = CHART_H - M.bottom;
+
+  const N = Math.max(hs.length, hq.length, 10);
+  const xHi = Math.log10(N);
+  const xOf = (e) => x0 + (xHi > 0 ? Math.log10(Math.max(e, 1)) / xHi : 0) * (x1 - x0);
+
+  let lo = Infinity, hi = 0;
+  for (const arr of [hs, hq]) {
+    for (const d of arr) {
+      if (d.err <= 0) continue;
+      if (d.err < lo) lo = d.err;
+      if (d.err > hi) hi = d.err;
+    }
+  }
+  if (!isFinite(lo) || lo <= 0) { lo = 0.01; hi = Math.max(hi, 1); }
+  const loE = Math.floor(Math.log10(lo));
+  const hiE = Math.ceil(Math.log10(Math.max(hi, lo * 10)));
+  const span = (hiE - loE) || 1;
+  const yOf = (v) => y1 - ((Math.log10(Math.max(v, Math.pow(10, loE))) - loE) / span) * (y1 - y0);
+
+  const parts = [];
+
+  for (let e = loE; e <= hiE; e++) {
+    const y = yOf(Math.pow(10, e)).toFixed(1);
+    const label = e >= 0 ? String(Math.pow(10, e)) : Math.pow(10, e).toFixed(-e);
+    parts.push(`<line class="gridline" x1="${x0}" y1="${y}" x2="${x1}" y2="${y}"/>`);
+    parts.push(`<line class="tick" x1="${x0 - 4}" y1="${y}" x2="${x0}" y2="${y}"/>`);
+    parts.push(`<text x="${x0 - 8}" y="${y}" text-anchor="end" dominant-baseline="middle">${label}</text>`);
+  }
+
+  for (let e = 0; e <= Math.ceil(xHi); e++) {
+    const v = Math.pow(10, e);
+    if (v > N) break;
+    const x = xOf(v).toFixed(1);
+    parts.push(`<line class="tick" x1="${x}" y1="${y1}" x2="${x}" y2="${y1 + 4}"/>`);
+    parts.push(`<text x="${x}" y="${y1 + 15}" text-anchor="middle">${v.toLocaleString()}</text>`);
+  }
+
+  const polyline = (arr, cls) => {
+    if (arr.length < 2) return '';
+    const stride = Math.max(1, Math.ceil(arr.length / 400));
+    const pts = [];
+    for (let i = 0; i < arr.length; i += stride) pts.push(`${xOf(i + 1).toFixed(1)},${yOf(arr[i].err).toFixed(1)}`);
+    const last = arr.length - 1;
+    if ((last % stride) !== 0) pts.push(`${xOf(arr.length).toFixed(1)},${yOf(arr[last].err).toFixed(1)}`);
+    return `<polyline class="${cls}" points="${pts.join(' ')}"/>`;
+  };
+
+  parts.push(polyline(hs, 'sline'));
+  parts.push(polyline(hq, 'qline'));
+
+  if (hs.length === 0 && hq.length === 0) {
+    parts.push(`<text x="${((x0 + x1) / 2).toFixed(1)}" y="${((y0 + y1) / 2).toFixed(1)}" text-anchor="middle">재생을 누르면 여기에 그려집니다</text>`);
+  }
+
+  parts.push(`<rect class="frame" x="${x0}" y="${y0}" width="${x1 - x0}" height="${y1 - y0}"/>`);
+  parts.push(`<text class="axis-name" x="${((x0 + x1) / 2).toFixed(1)}" y="${CHART_H - 4}" text-anchor="middle">에피소드</text>`);
+  parts.push(`<text class="axis-name" transform="rotate(-90 14 ${((y0 + y1) / 2).toFixed(1)})" x="14" y="${((y0 + y1) / 2).toFixed(1)}" text-anchor="middle" dominant-baseline="middle">값의 오차</text>`);
+
+  const svg =
+    `<svg viewBox="0 0 ${w} ${CHART_H}" width="${w}" height="${CHART_H}"
+          role="img" aria-label="에피소드에 따른 두 방식의 값 오차">${parts.join('')}</svg>`;
+
+  const cap = box.querySelector('figcaption');
+  box.innerHTML = '';
+  box.appendChild(cap);
+  box.insertAdjacentHTML('beforeend', svg);
+}
+
+/* ---------- 그리기 묶음 ---------- */
+
+function renderSide(ag, suffix) {
+  const m = ag.history.length ? ag.history[ag.history.length - 1] : null;
+  document.getElementById('ep-' + suffix).textContent = ag.episodes.toLocaleString();
+  document.getElementById('len-' + suffix).textContent =
+    ag.phase === 'walking' ? ag.stepsInEpisode : (ag.lastLen === null ? '—' : ag.lastLen);
+  document.getElementById('match-' + suffix).textContent = m ? `${m.match}/10` : '—';
+  document.getElementById('err-' + suffix).textContent = m ? m.err.toFixed(3) : '—';
+
+  const flag = document.getElementById('flag-' + suffix);
+  if (ag.episodes >= MAX_EPISODES) {
+    flag.textContent = `${MAX_EPISODES.toLocaleString()} 에피소드 완료`;
+    flag.className = 'flag done';
+  } else if (ag.phase === 'walking') {
+    flag.textContent = `걷는 중 · ${ag.stepsInEpisode}걸음째`;
+    flag.className = 'flag';
+  } else if (ag.phase === 'ended') {
+    flag.textContent = ag.truncated ? `${MAX_STEPS}걸음에서 끊음` : '판 종료';
+    flag.className = ag.truncated ? 'flag warn' : 'flag done';
+  } else {
+    flag.textContent = '시작 전';
+    flag.className = 'flag';
+  }
+}
+
+function render() {
+  let scale = 0;
+  for (const ag of agents()) {
+    for (const s of VALID) for (let a = 0; a < 4; a++) scale = Math.max(scale, Math.abs(ag.Q[s][a]));
+  }
+  scale = Math.max(scale, 0.05);   // 두 판이 같은 눈금을 쓰도록 함께 잡는다
+
+  const routeS = greedyRoute(S.sarsa, S.routeFrom);
+  const routeQ = greedyRoute(S.q, S.routeFrom);
+
+  renderGrid(S.sarsa, 'svg-sarsa', scale, routeS);
+  renderGrid(S.q, 'svg-q', scale, routeQ);
+  renderSide(S.sarsa, 'sarsa');
+  renderSide(S.q, 'q');
+
+  document.getElementById('route-sarsa').innerHTML = sideText(S.sarsa, routeS);
+  document.getElementById('route-q').innerHTML = sideText(S.q, routeQ);
+  document.getElementById('scale').textContent = `±${scale.toFixed(2)}`;
+
+  renderChart();
+}
+
+/* ---------- 재생 ---------- */
+
+let timer = null;
+
+function setPlayLabel() {
+  document.getElementById('play').textContent = S.playing ? '⏸ 일시정지' : '▶ 재생';
+}
+
+function tick() {
+  const { delay, batch } = SPEED[S.speed];
+  for (let i = 0; i < batch; i++) stepBoth();
+  render();
+  if (finished()) { pause(); return; }
+  timer = setTimeout(tick, delay);
+}
+
+function play() {
+  if (S.playing || finished()) return;
+  S.playing = true;
+  setPlayLabel();
+  tick();
+}
+
+function pause() {
+  if (timer !== null) clearTimeout(timer);
+  timer = null;
+  S.playing = false;
+  setPlayLabel();
+}
+
+function toggle() { S.playing ? pause() : play(); }
+
+/* ---------- 이벤트 ---------- */
+
+function bindRange(id, apply) {
+  const input = document.getElementById(id);
+  const out = document.getElementById(id + '-val');
+  input.addEventListener('input', () => {
+    apply(Number(input.value));
+    out.textContent = Number(input.value).toFixed(2);
+    reset();   // 도중에 바꾸면 헷갈리므로 처음부터 다시
+  });
+}
+
+bindRange('gamma', (v) => { S.gamma = v; });
+bindRange('epsilon', (v) => { S.epsilon = v; });
+bindRange('alpha', (v) => { S.alpha = v; });
+
+const seg = document.getElementById('speed');
+seg.addEventListener('click', (e) => {
+  const btn = e.target.closest('button');
+  if (!btn) return;
+  for (const b of seg.querySelectorAll('button')) b.setAttribute('aria-pressed', String(b === btn));
+  S.speed = btn.dataset.v;
+});
+
+document.getElementById('opt').addEventListener('change', (e) => { S.showOpt = e.target.checked; render(); });
+document.getElementById('route').addEventListener('change', (e) => { S.showRoute = e.target.checked; render(); });
+
+document.getElementById('play').addEventListener('click', toggle);
+document.getElementById('step').addEventListener('click', () => { pause(); stepBoth(); render(); });
+document.getElementById('episode').addEventListener('click', () => { pause(); episodeBoth(); render(); });
+document.getElementById('run100').addEventListener('click', () => { pause(); runEpisodes(100); render(); });
+document.getElementById('reset').addEventListener('click', reset);
+
+// 칸을 누르면 그 칸에서 출발하는 길로 바꿔 그린다
+for (const id of ['svg-sarsa', 'svg-q']) {
+  document.getElementById(id).addEventListener('click', (e) => {
+    const hit = e.target.closest('.hit');
+    if (!hit) return;
+    S.routeFrom = hit.dataset.s;
+    render();
+  });
+}
+
+window.addEventListener('resize', () => renderChart());
+
+document.addEventListener('keydown', (e) => {
+  if (e.code !== 'Space') return;
+  const t = e.target;
+  if (t && (t.tagName === 'INPUT' || t.tagName === 'BUTTON')) return;
+  e.preventDefault();
+  toggle();
+});
+
+reset();
+</script>
+</body>
+</html>

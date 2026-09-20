@@ -1,0 +1,1128 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>한 걸음마다 정책을 고쳐 나가기 — SARSA와 Q 러닝</title>
+<meta name="description" content="6장 TD법 제어를 한 걸음씩 돌려보는 그리드 월드 데모. SARSA·오프-정책 SARSA·Q 러닝을 같은 화면에서 바꿔가며 수렴 대상의 차이를 본다.">
+<style>
+/* 색과 기본 서식 — docs/style.css 에서 이 화면에 필요한 부분만 옮겨왔다 */
+:root {
+  --bg: #f7f8fa;
+  --surface: #ffffff;
+  --border: #e2e5ea;
+  --text: #1c2024;
+  --text-dim: #5c6570;
+  --text-faint: #8b939d;
+  --accent: #2f6bd8;
+  --accent-soft: #eaf0fc;
+  --answer-bg: #f2f7f1;
+  --done: #3f8f52;
+  --minus: #a63d5c;
+  --shadow: 0 1px 2px rgba(20, 25, 35, .06), 0 1px 8px rgba(20, 25, 35, .04);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #14171b;
+    --surface: #1c2025;
+    --border: #2e343b;
+    --text: #e6e9ec;
+    --text-dim: #a3acb6;
+    --text-faint: #78828d;
+    --accent: #7aa7f0;
+    --accent-soft: #212b3d;
+    --answer-bg: #1b2620;
+    --done: #6fbd82;
+    --minus: #e08fa8;
+    --shadow: 0 1px 2px rgba(0, 0, 0, .3), 0 1px 8px rgba(0, 0, 0, .2);
+  }
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo",
+    "Pretendard", "Malgun Gothic", "Noto Sans KR", sans-serif;
+  font-size: 16px;
+  line-height: 1.7;
+  -webkit-text-size-adjust: 100%;
+}
+
+.wrap { max-width: 860px; margin: 0 auto; padding: 32px 20px 80px; }
+
+a { color: var(--accent); }
+
+code {
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  font-size: .9em;
+  background: var(--accent-soft);
+  padding: .1em .35em;
+  border-radius: 4px;
+}
+
+.masthead { margin-bottom: 28px; }
+.masthead h1 { font-size: 1.65rem; margin: 0 0 6px; letter-spacing: -.02em; }
+.masthead p { margin: 0; color: var(--text-dim); font-size: .93rem; }
+.masthead .lede { margin: 12px 0 0; color: var(--text); font-size: .95rem; max-width: 64ch; }
+
+button {
+  font: inherit;
+  font-size: .85rem;
+  padding: 5px 12px;
+  border-radius: 7px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text-dim);
+  cursor: pointer;
+  transition: border-color .15s, color .15s;
+}
+
+button:hover { border-color: var(--accent); color: var(--accent); }
+
+.footer {
+  margin-top: 56px;
+  padding-top: 20px;
+  border-top: 1px solid var(--border);
+  font-size: .8rem;
+  color: var(--text-faint);
+  line-height: 1.75;
+}
+.footer p { margin: 0 0 6px; }
+</style>
+<style>
+  .panel {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    box-shadow: var(--shadow);
+    padding: 16px 18px;
+    margin-bottom: 16px;
+  }
+
+  /* ---------- 조작부 ---------- */
+
+  .controls { display: flex; flex-wrap: wrap; align-items: center; gap: 14px 20px; }
+
+  .ctl { display: flex; align-items: center; gap: 8px; font-size: .86rem; color: var(--text-dim); }
+
+  .ctl input[type=range] { width: 130px; accent-color: var(--accent); }
+
+  .ctl .val {
+    font-variant-numeric: tabular-nums;
+    font-weight: 700;
+    color: var(--text);
+    min-width: 2.6em;
+  }
+
+  .seg { display: inline-flex; border: 1px solid var(--border); border-radius: 7px; overflow: hidden; }
+  .seg button { border: 0; border-radius: 0; padding: 5px 11px; }
+  .seg button + button { border-left: 1px solid var(--border); }
+  .seg button[aria-pressed="true"] { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+
+  .actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; align-items: center; }
+
+  button.primary {
+    font-size: .92rem;
+    font-weight: 600;
+    padding: 8px 18px;
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #fff;
+  }
+  button.primary:hover { background: var(--accent); color: #fff; filter: brightness(1.08); }
+
+  .hint { font-size: .78rem; color: var(--text-faint); margin-left: auto; }
+
+  /* ---------- 상태 표시 ---------- */
+
+  .stats { display: flex; flex-wrap: wrap; gap: 10px 26px; align-items: baseline; }
+
+  .stat .label { font-size: .74rem; color: var(--text-faint); display: block; letter-spacing: .03em; }
+  .stat .num { font-size: 1.15rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+
+  .flag {
+    font-size: .72rem;
+    font-weight: 700;
+    padding: 2px 9px;
+    border-radius: 20px;
+    background: var(--accent-soft);
+    color: var(--accent);
+  }
+  .flag.done { background: var(--answer-bg); color: var(--done); }
+  .flag.warn { background: rgba(166, 61, 92, .12); color: var(--minus); }
+
+  /* ---------- 그래프 ---------- */
+
+  .chart { margin: 18px 0 0; }
+
+  .chart figcaption { font-size: .78rem; color: var(--text-faint); margin-bottom: 8px; }
+
+  .chart svg { display: block; width: 100%; }
+
+  .chart .frame { fill: none; stroke: var(--border); stroke-width: 1; }
+  .chart .gridline { stroke: var(--border); stroke-dasharray: 2 3; opacity: .8; }
+  .chart .tick { stroke: var(--border); }
+
+  .chart text {
+    fill: var(--text-faint);
+    font-size: 10.5px;
+    font-variant-numeric: tabular-nums;
+  }
+  .chart .axis-name { fill: var(--text-dim); }
+
+  .chart .line { fill: none; stroke: var(--accent); stroke-width: 1.7; stroke-linejoin: round; }
+  .chart .dot { fill: var(--accent); }
+  .chart .match { fill: none; stroke: var(--done); stroke-width: 1.4; stroke-linejoin: round; opacity: .85; }
+  .chart .match-axis { fill: var(--done); }
+  .chart .full { stroke: var(--done); stroke-width: 1; stroke-dasharray: 5 3; opacity: .55; }
+
+  /* ---------- Q 그리드 ---------- */
+
+  .qgrid svg { display: block; width: 100%; height: auto; }
+  .qgrid .cellframe { fill: none; stroke: var(--border); stroke-width: 1.4; }
+  .qgrid .diag { stroke: var(--border); stroke-width: .8; }
+  .qgrid .qtext { font-size: 10px; fill: var(--text-dim); font-variant-numeric: tabular-nums; }
+  .qgrid .coord { font-size: 9px; fill: var(--text-faint); font-variant-numeric: tabular-nums; }
+  .qgrid .tagp { font-size: 10px; font-weight: 700; fill: var(--done); }
+  .qgrid .tagm { font-size: 10px; font-weight: 700; fill: var(--minus); }
+  .qgrid .arrow { font-size: 17px; fill: var(--text); font-weight: 700; }
+  .qgrid .arrow.on { fill: #fff; }
+  .qgrid .optarrow { font-size: 11px; fill: var(--text-faint); }
+  .qgrid .vstar { font-size: 9px; fill: var(--text-faint); font-variant-numeric: tabular-nums; }
+  .qgrid .wall { fill: var(--border); }
+  .qgrid .goal { fill: var(--answer-bg); }
+  .qgrid .label { font-size: 11px; fill: var(--text-dim); }
+  .qgrid .path { fill: none; stroke: var(--accent); stroke-width: 1.6; stroke-dasharray: 4 3; }
+  .qgrid .here { fill: none; stroke: var(--accent); stroke-width: 2.4; }
+  .qgrid .bad { fill: none; stroke: var(--minus); stroke-width: 2.4; }
+  .qgrid .agent { fill: var(--accent); }
+
+  .legend {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: .76rem;
+    color: var(--text-faint);
+    margin-top: 12px;
+  }
+  .legend .bar {
+    flex: 1;
+    height: 8px;
+    border-radius: 4px;
+    background: linear-gradient(90deg,
+      rgba(190, 70, 80, .45), rgba(190, 70, 80, 0), rgba(47, 107, 216, 0), rgba(47, 107, 216, .45));
+  }
+  .legend-note { font-size: .78rem; color: var(--text-faint); margin: 8px 0 0; }
+
+  /* ---------- 갱신 표 ---------- */
+
+  .replay h2 { font-size: .95rem; margin: 0 0 4px; }
+  .replay .sub { font-size: .8rem; color: var(--text-faint); margin: 0 0 12px; }
+
+  table.terms { width: 100%; border-collapse: collapse; font-size: .82rem; font-variant-numeric: tabular-nums; }
+  table.terms th, table.terms td { padding: 5px 7px; border-bottom: 1px solid var(--border); text-align: right; }
+  table.terms th { color: var(--text-faint); font-weight: 600; font-size: .74rem; letter-spacing: .02em; }
+  table.terms th:first-child, table.terms td:first-child { text-align: left; }
+  table.terms tr:last-child td { border-bottom: 0; }
+  table.terms tr.dead td { color: var(--text-faint); }
+  table.terms tr.dead td.rho { color: var(--minus); font-weight: 700; }
+  table.terms td .arrow { color: var(--text-faint); padding: 0 3px; }
+  table.terms tr.head-sep td { border-bottom: 2px solid var(--border); }
+
+  .note { font-size: .84rem; color: var(--text-dim); margin: 10px 0 0; }
+  .note code { font-size: .86em; }
+
+  details.about summary { cursor: pointer; font-size: .9rem; font-weight: 600; }
+  details.about > div { margin-top: 10px; font-size: .88rem; color: var(--text-dim); }
+  details.about ul { margin: 8px 0 0; padding-left: 20px; }
+  details.about li { margin-bottom: 5px; }
+
+  @media (max-width: 520px) {
+    .ctl input[type=range] { width: 100px; }
+    table.terms th, table.terms td { padding: 4px 3px; font-size: .72rem; }
+  }
+</style>
+<style>
+  /* 이 화면에만 필요한 것 — 방식별 곡선을 겹쳐 두고, 갱신을 기다리는 줄을 따로 표시한다 */
+
+  .ctl.off { opacity: .4; }
+
+  .chart .ghost { fill: none; stroke: var(--text-faint); stroke-width: 1.2; opacity: .5; stroke-dasharray: 4 3; }
+  .chart .ghost-label { fill: var(--text-faint); font-size: 9.5px; }
+
+  table.terms tr.pending td {
+    color: var(--accent);
+    background: var(--accent-soft);
+  }
+  table.terms tr.final td { color: var(--done); }
+  table.terms th.sep, table.terms td.sep { border-left: 1px solid var(--border); }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="masthead">
+    <h1>한 걸음마다 정책을 고쳐 나가기</h1>
+    <p>6장 TD법 제어 · <code>s02_sarsa.py</code> · <code>s03_sarsa_off_policy.py</code> · <code>s04_q_learning.py</code>를 한 걸음씩</p>
+    <p class="lede">평가에 개선을 붙이면 제어가 됩니다. 세 방식의 차이는 <b>다음 상태의 값을 무엇으로 쓰는가</b> 한 군데뿐인데, 그 한 군데가 무엇에 수렴하는지를 갈라놓습니다.</p>
+  </header>
+
+  <section class="panel">
+    <div class="controls">
+      <span class="ctl">
+        방식
+        <span class="seg" id="mode">
+          <button type="button" data-v="sarsa" aria-pressed="true">SARSA</button>
+          <button type="button" data-v="off" aria-pressed="false">오프-정책 SARSA</button>
+          <button type="button" data-v="q" aria-pressed="false">Q 러닝</button>
+        </span>
+      </span>
+
+      <label class="ctl">
+        할인율 γ
+        <input id="gamma" type="range" min="0.5" max="0.99" step="0.01" value="0.9">
+        <span class="val" id="gamma-val">0.90</span>
+      </label>
+
+      <label class="ctl">
+        ε
+        <input id="epsilon" type="range" min="0.02" max="0.6" step="0.01" value="0.1">
+        <span class="val" id="epsilon-val">0.10</span>
+      </label>
+
+      <label class="ctl">
+        α
+        <input id="alpha" type="range" min="0.05" max="1" step="0.05" value="0.8">
+        <span class="val" id="alpha-val">0.80</span>
+      </label>
+
+      <span class="ctl">
+        진행 단위
+        <span class="seg" id="grain">
+          <button type="button" data-v="step" aria-pressed="true">한 걸음</button>
+          <button type="button" data-v="episode" aria-pressed="false">한 에피소드</button>
+        </span>
+      </span>
+
+      <label class="ctl"><input id="opt" type="checkbox"> 4장 최적 정책과 견주기</label>
+      <label class="ctl off" id="sample-ctl"><input id="sample" type="checkbox" disabled> 샘플 모델 버전(<code>s05</code>)</label>
+    </div>
+
+    <div class="actions">
+      <button type="button" class="primary" id="step">다음</button>
+      <button type="button" id="run100">100 에피소드</button>
+      <button type="button" id="run1000">1,000 에피소드</button>
+      <button type="button" id="run10000">10,000 에피소드</button>
+      <button type="button" id="reset">초기화</button>
+      <span class="hint">스페이스바로도 진행됩니다</span>
+    </div>
+  </section>
+
+  <section class="panel">
+    <div class="stats">
+      <span class="stat"><span class="label">에피소드</span><span class="num" id="ep">0</span></span>
+      <span class="stat"><span class="label">이번 판 걸음</span><span class="num" id="len">—</span></span>
+      <span class="stat"><span class="label">최적 행동 일치</span><span class="num" id="match">—</span></span>
+      <span class="stat"><span class="label">max|max Q − v*|</span><span class="num" id="err">—</span></span>
+      <span class="stat"><span class="label">상태</span><span class="flag" id="flag">시작 전</span></span>
+    </div>
+
+    <figure class="chart" id="chart">
+      <figcaption>파랑: 값의 오차 max|max<sub>a</sub>Q − v*| (왼쪽 눈금, 로그) · 초록: 최적 행동 일치 칸 수 (오른쪽 눈금) · 회색 파선: 앞서 돌려본 다른 방식의 오차 곡선</figcaption>
+    </figure>
+  </section>
+
+  <section class="panel qgrid" id="qgrid">
+    <div id="qsvg"></div>
+    <div class="legend">
+      <span>낮음</span><span class="bar"></span><span>높음</span>
+      <span id="scale" style="margin-left:6px"></span>
+    </div>
+    <p class="legend-note" id="legend-note"></p>
+  </section>
+
+  <section class="panel replay" id="replay"></section>
+
+  <section class="panel">
+    <details class="about">
+      <summary>이 화면이 계산하는 것</summary>
+      <div>
+        <p style="margin:0">
+          4장과 같은 3×4 그리드 월드에서 <b>한 걸음마다</b> Q를 갱신하고 그 자리에서 정책을 탐욕화합니다.
+          5장 MC법처럼 에피소드가 끝나기를 기다리지 않습니다. 세 방식은 갱신식의
+          <b>다음 상태 값</b> 자리만 다릅니다.
+        </p>
+        <p style="margin:10px 0 0">
+          SARSA [식 6.10] · <code>Q(s,a) ← Q(s,a) + α{ R + γQ(s′,a′) − Q(s,a) }</code><br>
+          오프-정책 SARSA [식 6.13] · <code>목표 = ρ( R + γQ(s′,a′) )</code>, <code>ρ = π(a′|s′)/b(a′|s′)</code><br>
+          Q 러닝 [식 6.14] · <code>Q(s,a) ← Q(s,a) + α{ R + γ max<sub>a</sub>Q(s′,a) − Q(s,a) }</code>
+        </p>
+        <ul>
+          <li><b>SARSA는 한 걸음 늦게 갱신합니다.</b> <code>Q(s′,A′)</code>가 필요하니 다음 행동이 정해져야 하기 때문입니다. 표 맨 아래 파란 줄이 그 <b>갱신 대기</b> 상태이고, 파이썬 코드의 <code>deque(maxlen=2)</code>가 바로 이것입니다. 목표에 닿으면 더미 데이터를 한 번 더 밀어 넣어 마지막 (S, A)까지 갱신합니다(초록 줄).</li>
+          <li><b>Q 러닝은 기다리지 않습니다.</b> <code>max<sub>a</sub>Q(s′,a)</code>는 이미 갖고 있는 Q 표를 훑으면 되므로 한 걸음 안에서 갱신이 끝나고, 대기 줄도 <code>deque</code>도 없습니다.</li>
+          <li><b>ρ가 곱해 쌓이지 않습니다.</b> 5장 MC법의 오프-정책은 종료까지의 ρ를 전부 곱해야 했지만, TD법은 한 걸음만 내다보므로 매 걸음 <b>새로 계산한 ρ 하나</b>뿐입니다(<code>*=</code>가 아니라 <code>=</code>). TD법이 오프-정책과 잘 맞는 이유입니다.</li>
+          <li><b>무엇에 수렴하는지가 다릅니다.</b> SARSA가 평가하는 것은 ε만큼 헤매는 자기 자신(v<sub>ε-탐욕</sub>)이라 값의 오차가 0.5 근처에서 더 줄지 않습니다. 표본이 모자라서가 아니라 <b>애초에 다른 것을 평가</b>하는 것입니다. Q 러닝은 벨만 최적 방정식의 샘플 버전이라 q*로 수렴해, 이 환경에서는 오차가 <b>0.00</b>까지 내려갑니다. 방식을 바꿔 돌려보면 이전 곡선이 회색 파선으로 남아 바로 견줄 수 있습니다.</li>
+          <li>그래서 <b>배우는 길도 다릅니다</b>. 「4장 최적 정책과 견주기」를 켜고 아래쪽 줄을 보면, SARSA는 폭탄에서 멀어지는 쪽(안전하지만 돌아가는 길)을 골라 붉은 테두리가 몇 칸 남고, Q 러닝은 4장 최적 정책과 같은 방향을 가리킵니다.</li>
+          <li>Q 러닝에서 값이 <code>1.00</code>, <code>0.90</code>, <code>0.81</code>, <code>0.73</code>처럼 γ의 거듭제곱으로 깔끔하게 찍히는 것도 같은 이유입니다. 이 환경이 결정적이라 TD 목표에 잡음이 거의 없어 α = 0.8이 커도 흔들리지 않습니다.</li>
+          <li><b>샘플 모델 버전</b>(6.5절, <code>s05_q_learning_simple.py</code>)을 켜면 <code>pi</code>와 <code>b</code> 딕셔너리가 사라지고 <code>Q</code> 하나만 남습니다. 행동은 <code>if rand() &lt; ε: 무작위 else: argmax</code> 규칙으로 그 자리에서 뽑습니다. 알고리즘은 완전히 같고 표현만 다릅니다 — 다만 동점일 때 <code>np.argmax</code>가 <b>첫 번째</b> 행동을 고르므로 초반 움직임이 조금 다릅니다.</li>
+          <li>위쪽 <b>최적 행동 일치</b>는 벽과 목표를 뺀 10칸 중 탐욕 행동이 최적 행동인 칸 수입니다. 이 화면은 <b>동점이면 어느 쪽이든 인정</b>하므로 Q 러닝은 <code>10/10</code>까지 올라갑니다. README에 적힌 <code>9/10</code>은 4장 DP가 고른 한 행동하고만 견준 결과인데, 어긋나는 칸은 시작 칸 (2, 0)입니다 — 거기서는 UP과 RIGHT가 둘 다 <code>0.66</code>으로 <b>동점</b>이라 어느 쪽을 골라도 최적입니다.</li>
+          <li>칸마다 네 방향의 Q를 삼각형으로 나눠 그렸습니다. 가운데 화살표는 지금 Q를 탐욕화한 행동이고, 파란 원은 에이전트의 자리입니다.</li>
+          <li>방식·γ·ε·α를 바꾸면 처음부터 다시 시작합니다.</li>
+        </ul>
+      </div>
+    </details>
+  </section>
+
+  <footer class="footer">
+    <p>
+      예제 코드 저장소:
+      <a href="https://github.com/sajacaros/deep-learning-from-scratch-4" target="_blank" rel="noopener noreferrer">sajacaros/deep-learning-from-scratch-4</a>
+      · 원저작 코드
+      <a href="https://github.com/WegraLee/deep-learning-from-scratch-4" target="_blank" rel="noopener noreferrer">WegraLee/deep-learning-from-scratch-4</a>
+    </p>
+  </footer>
+
+</div>
+<script>
+/* 6장 TD법 제어 — s02_sarsa.py(온-정책), s03_sarsa_off_policy.py(오프-정책),
+   s04_q_learning.py 와 s05_q_learning_simple.py(샘플 모델)를 같은 화면에 올렸다.
+   환경은 common/gridworld.py 그대로이고, 학습하는 쪽은 step() 의 결과만 본다. */
+
+const H = 3, W = 4;
+const REWARD = [
+  [0, 0, 0, 1.0],
+  [0, null, 0, -1.0],
+  [0, 0, 0, 0],
+];
+const GOAL = '0,3';
+const WALL = '1,1';
+const START = '2,0';
+const MOVES = [[-1, 0], [1, 0], [0, -1], [0, 1]];
+const ARROW = ['↑', '↓', '←', '→'];
+const ACTION_NAME = ['UP ↑', 'DOWN ↓', 'LEFT ←', 'RIGHT →'];
+const MODE_NAME = { sarsa: 'SARSA', off: '오프-정책 SARSA', q: 'Q 러닝' };
+const MAX_STEPS = 2000;   // 탐욕 정책이 제자리를 맴돌 때를 위한 안전장치
+
+const key = (y, x) => y + ',' + x;
+const parse = (s) => s.split(',').map(Number);
+
+const ORDER = [];
+for (let y = 0; y < H; y++) {
+  for (let x = 0; x < W; x++) {
+    if (key(y, x) !== WALL) ORDER.push(key(y, x));
+  }
+}
+const VALID = ORDER.filter((s) => s !== GOAL);   // 성적을 재는 10칸
+
+function nextState(y, x, a) {
+  const ny = y + MOVES[a][0], nx = x + MOVES[a][1];
+  if (nx < 0 || nx >= W || ny < 0 || ny >= H) return [y, x];
+  if (key(ny, nx) === WALL) return [y, x];
+  return [ny, nx];
+}
+
+/* ---------- 정책 ---------- */
+
+/* common/utils.py 의 argmax 는 동점이면 무작위, s05 의 np.argmax 는 첫 번째를 고른다 */
+function argmaxIdx(qs, tie) {
+  let m = -Infinity;
+  for (const q of qs) if (q > m) m = q;
+  const idx = [];
+  for (let a = 0; a < 4; a++) if (qs[a] === m) idx.push(a);
+  return (tie === 'random' && idx.length > 1) ? idx[Math.floor(Math.random() * idx.length)] : idx[0];
+}
+
+/* greedy_probs() 를 그대로 옮긴 것 */
+function greedyProbs(qs, epsilon) {
+  const best = argmaxIdx(qs, 'random');
+  const base = epsilon / 4;
+  const probs = [base, base, base, base];
+  probs[best] += 1 - epsilon;
+  return probs;
+}
+
+function sampleAction(probs) {
+  let u = Math.random(), acc = 0;
+  for (let a = 0; a < 4; a++) {
+    acc += probs[a];
+    if (u < acc) return a;
+  }
+  return 3;
+}
+
+/* ---------- 견줄 기준: 4장 가치 반복법 ---------- */
+
+function valueIteration(gamma) {
+  const V = {};
+  for (const s of ORDER) V[s] = 0;
+  V[WALL] = 0;
+  for (let iter = 0; iter < 100000; iter++) {
+    let delta = 0;
+    for (const s of ORDER) {
+      if (s === GOAL) continue;
+      const [y, x] = parse(s);
+      let best = -Infinity;
+      for (let a = 0; a < 4; a++) {
+        const [ny, nx] = nextState(y, x, a);
+        best = Math.max(best, REWARD[ny][nx] + gamma * V[key(ny, nx)]);
+      }
+      delta = Math.max(delta, Math.abs(best - V[s]));
+      V[s] = best;
+    }
+    if (delta < 1e-13) break;
+  }
+  return V;
+}
+
+/* v* 를 기준으로 한 최적 행동 집합 — 동점이면 여럿 */
+function optimalActions(V, gamma) {
+  const opt = {};
+  for (const s of VALID) {
+    const [y, x] = parse(s);
+    const qs = [];
+    for (let a = 0; a < 4; a++) {
+      const [ny, nx] = nextState(y, x, a);
+      qs.push(REWARD[ny][nx] + gamma * V[key(ny, nx)]);
+    }
+    const best = Math.max(...qs);
+    opt[s] = qs.map((q, a) => (q > best - 1e-9 ? a : -1)).filter((a) => a >= 0);
+  }
+  return opt;
+}
+
+/* ---------- 상태 ---------- */
+
+const S = {
+  mode: 'sarsa',     // 'sarsa' | 'off' | 'q'
+  sample: false,     // Q 러닝의 샘플 모델 버전(s05)
+  gamma: 0.9,
+  epsilon: 0.1,
+  alpha: 0.8,
+  grain: 'step',
+  showOpt: false,
+
+  Q: null,
+  pi: null,          // 대상 정책 (SARSA 에서는 행동 정책이기도 하다)
+  b: null,           // 행동 정책 (오프-정책·Q 러닝 전용)
+  memory: [],        // deque(maxlen=2) — SARSA 계열만 쓴다
+  visits: {},        // 이번 에피소드에 지나간 칸
+  rows: [],          // 이번 에피소드의 갱신 기록
+  pos: null,
+  phase: 'idle',     // 'idle' | 'walking' | 'ended'
+  episodes: 0,
+  stepsInEpisode: 0,
+  lastLen: null,
+  truncated: false,
+  history: [],       // 에피소드마다 {err, match}
+  ghosts: {},        // 앞서 돌려본 방식의 오차 곡선
+
+  vStar: null,
+  optActions: null,
+};
+
+function uniform() { return [0.25, 0.25, 0.25, 0.25]; }
+
+function reset() {
+  S.vStar = valueIteration(S.gamma);
+  S.optActions = optimalActions(S.vStar, S.gamma);
+
+  S.Q = {}; S.pi = {}; S.b = {};
+  for (const s of ORDER) {
+    S.Q[s] = [0, 0, 0, 0];
+    S.pi[s] = uniform();
+    S.b[s] = uniform();
+  }
+  S.memory = [];
+  S.visits = {};
+  S.rows = [];
+  S.pos = null;
+  S.phase = 'idle';
+  S.episodes = 0;
+  S.stepsInEpisode = 0;
+  S.lastLen = null;
+  S.truncated = false;
+  S.history = [];
+  render();
+}
+
+function greedyAction(s) { return argmaxIdx(S.Q[s], 'first'); }   // 표시·채점은 항상 같은 규칙으로
+
+function measure() {
+  let err = 0, match = 0;
+  for (const s of VALID) {
+    const maxQ = Math.max(...S.Q[s]);
+    err = Math.max(err, Math.abs(maxQ - S.vStar[s]));
+    if (S.optActions[s].includes(greedyAction(s))) match++;
+  }
+  return { err, match };
+}
+
+/* ---------- 한 판 걷기 ---------- */
+
+function beginEpisode() {
+  S.pos = START;
+  S.memory = [];
+  S.visits = {};
+  S.rows = [];
+  S.stepsInEpisode = 0;
+  S.truncated = false;
+  S.phase = 'walking';
+}
+
+/* get_action() — 방식에 따라 어느 정책에서 뽑는지가 다르다 */
+function pickAction(s) {
+  if (S.mode === 'q' && S.sample) {                    // s05: 분포를 저장하지 않고 규칙으로
+    if (Math.random() < S.epsilon) return Math.floor(Math.random() * 4);
+    return argmaxIdx(S.Q[s], 'first');                 // np.argmax
+  }
+  return sampleAction(S.mode === 'sarsa' ? S.pi[s] : S.b[s]);
+}
+
+/* 정책 개선 — 갱신한 상태에 대해서만 */
+function improve(s) {
+  if (S.mode === 'sarsa') {
+    S.pi[s] = greedyProbs(S.Q[s], S.epsilon);          // 평가 대상이 곧 행동 정책
+  } else if (S.mode === 'off') {
+    S.pi[s] = greedyProbs(S.Q[s], 0);                  // 대상 정책: 순수 탐욕
+    S.b[s] = greedyProbs(S.Q[s], S.epsilon);           // 행동 정책: ε-탐욕
+  } else if (!S.sample) {
+    S.pi[s] = greedyProbs(S.Q[s], 0);
+    S.b[s] = greedyProbs(S.Q[s], S.epsilon);
+  }
+}
+
+/* SarsaAgent.update() — memory 가 둘 찼을 때만 갱신한다 */
+function sarsaUpdate() {
+  if (S.memory.length < 2) return;
+  const m0 = S.memory[0], m1 = S.memory[1];
+
+  let nextQ, rho = 1;
+  if (m0.done) {
+    nextQ = 0;                                          // 목표에 도달했으면 다음 Q 는 0
+  } else {
+    nextQ = S.Q[m1.s][m1.a];
+    if (S.mode === 'off') rho = S.pi[m1.s][m1.a] / S.b[m1.s][m1.a];   // 매번 새로 계산
+  }
+
+  const target = S.mode === 'off' ? rho * (m0.r + S.gamma * nextQ) : m0.r + S.gamma * nextQ;
+  const before = S.Q[m0.s][m0.a];
+  const after = before + (target - before) * S.alpha;
+  S.Q[m0.s][m0.a] = after;
+  improve(m0.s);
+
+  S.rows.push({
+    t: m0.t, s: m0.s, a: m0.a, r: m0.r, final: m0.done,
+    nextS: m1.s, nextA: m1.a, nextVal: nextQ, rho,
+    target, before, after, greedy: greedyAction(m0.s),
+  });
+}
+
+/* QLearningAgent.update() — 한 걸음 안에서 끝난다 */
+function qUpdate(s, a, r, ns, done) {
+  const nextMax = done ? 0 : Math.max(...S.Q[ns]);
+  const target = r + S.gamma * nextMax;
+  const before = S.Q[s][a];
+  const after = before + (target - before) * S.alpha;
+  S.Q[s][a] = after;
+  improve(s);
+
+  S.rows.push({
+    t: S.stepsInEpisode, s, a, r, final: done,
+    nextS: ns, nextA: null, nextVal: nextMax, rho: 1,
+    target, before, after, greedy: greedyAction(s),
+  });
+}
+
+function finishEpisode() {
+  S.episodes++;
+  S.lastLen = S.stepsInEpisode;
+  S.history.push(measure());
+  S.phase = 'ended';
+  S.pos = null;
+}
+
+/* 한 걸음. 에피소드가 끝났으면 true */
+function walkOneStep() {
+  if (S.phase !== 'walking') beginEpisode();
+
+  const s = S.pos;
+  const a = pickAction(s);
+  const [y, x] = parse(s);
+  const [ny, nx] = nextState(y, x, a);
+  const ns = key(ny, nx);
+  const r = REWARD[ny][nx] ?? 0;
+  const done = ns === GOAL;
+
+  S.visits[s] = (S.visits[s] || 0) + 1;
+  const t = S.stepsInEpisode;
+  S.stepsInEpisode++;
+
+  if (S.mode === 'q') {
+    qUpdate(s, a, r, ns, done);
+    if (done) { finishEpisode(); return true; }
+  } else {
+    S.memory.push({ t, s, a, r, done });
+    if (S.memory.length > 2) S.memory.shift();          // deque(maxlen=2)
+    sarsaUpdate();
+    if (done) {
+      // 목표에 도달했을 때도 한 번 더 — 마지막 (S, A) 를 갱신하기 위한 더미
+      S.memory.push({ t: t + 1, s: ns, a: null, r: null, done: null });
+      if (S.memory.length > 2) S.memory.shift();
+      sarsaUpdate();
+      finishEpisode();
+      return true;
+    }
+  }
+
+  if (S.stepsInEpisode >= MAX_STEPS) {                   // 맴도는 판은 끊는다
+    S.truncated = true;
+    finishEpisode();
+    return true;
+  }
+  S.pos = ns;
+  return false;
+}
+
+function step() {
+  if (S.grain === 'step') walkOneStep();
+  else runEpisodes(1);
+  render();
+}
+
+function runEpisodes(count) {
+  for (let k = 0; k < count; k++) {
+    let guard = 0;
+    while (!walkOneStep() && guard++ < MAX_STEPS + 5) { /* 한 판 */ }
+  }
+  render();
+}
+
+/* ---------- Q 그리드 그리기 ---------- */
+
+const C = 100, GAP = 8;   // 칸 크기와 간격 (viewBox 단위)
+
+function heat(v, scale) {
+  if (scale < 1e-9) return 'transparent';
+  const t = Math.max(-1, Math.min(1, v / scale));
+  const a = (Math.abs(t) * 0.45).toFixed(3);
+  return t >= 0 ? `rgba(47, 107, 216, ${a})` : `rgba(190, 70, 80, ${a})`;
+}
+
+function renderGrid() {
+  let scale = 0;
+  for (const s of VALID) for (let a = 0; a < 4; a++) scale = Math.max(scale, Math.abs(S.Q[s][a]));
+  scale = Math.max(scale, 0.05);
+
+  const w = W * C + (W - 1) * GAP, h = H * C + (H - 1) * GAP;
+  const p = [];
+
+  for (let y = 0; y < H; y++) {
+    for (let x = 0; x < W; x++) {
+      const s = key(y, x);
+      const cx = x * (C + GAP), cy = y * (C + GAP);
+      const mx = cx + C / 2, my = cy + C / 2;
+
+      if (s === WALL) {
+        p.push(`<rect class="wall" x="${cx}" y="${cy}" width="${C}" height="${C}" rx="7"/>`);
+        p.push(`<text class="label" x="${mx}" y="${my + 4}" text-anchor="middle">벽</text>`);
+        continue;
+      }
+      if (s === GOAL) {
+        p.push(`<rect class="goal" x="${cx}" y="${cy}" width="${C}" height="${C}" rx="7"/>`);
+        p.push(`<rect class="cellframe" x="${cx}" y="${cy}" width="${C}" height="${C}" rx="7"/>`);
+        p.push(`<text class="coord" x="${cx + 7}" y="${cy + 14}">(${y}, ${x})</text>`);
+        p.push(`<text class="tagp" x="${cx + C - 7}" y="${cy + 14}" text-anchor="end">+1</text>`);
+        p.push(`<text class="label" x="${mx}" y="${my + 4}" text-anchor="middle">목표</text>`);
+        continue;
+      }
+
+      // 네 방향의 Q 를 삼각형으로 (render_q() 와 같은 배치)
+      const tri = [
+        `${mx},${my} ${cx + C},${cy} ${cx},${cy}`,               // UP
+        `${cx},${cy + C} ${cx + C},${cy + C} ${mx},${my}`,       // DOWN
+        `${cx},${cy} ${mx},${my} ${cx},${cy + C}`,               // LEFT
+        `${mx},${my} ${cx + C},${cy} ${cx + C},${cy + C}`,       // RIGHT
+      ];
+      const tx = [[mx, cy + 0.26 * C], [mx, cy + 0.88 * C], [cx + 0.17 * C, my + 3], [cx + 0.83 * C, my + 3]];
+      for (let a = 0; a < 4; a++) {
+        p.push(`<polygon points="${tri[a]}" fill="${heat(S.Q[s][a], scale)}"/>`);
+      }
+      p.push(`<line class="diag" x1="${cx}" y1="${cy}" x2="${cx + C}" y2="${cy + C}"/>`);
+      p.push(`<line class="diag" x1="${cx + C}" y1="${cy}" x2="${cx}" y2="${cy + C}"/>`);
+      for (let a = 0; a < 4; a++) {
+        p.push(`<text class="qtext" x="${tx[a][0]}" y="${tx[a][1]}" text-anchor="middle">${S.Q[s][a].toFixed(2)}</text>`);
+      }
+
+      p.push(`<rect class="cellframe" x="${cx}" y="${cy}" width="${C}" height="${C}" rx="7"/>`);
+      p.push(`<text class="coord" x="${cx + 7}" y="${cy + 14}">(${y}, ${x})</text>`);
+
+      const r = REWARD[y][x];
+      if (r) {
+        p.push(`<text class="${r > 0 ? 'tagp' : 'tagm'}" x="${cx + C - 7}" y="${cy + 14}" text-anchor="end">${r > 0 ? '+1' : '−1'}</text>`);
+      }
+
+      const g = greedyAction(s);
+      const here = s === S.pos;
+      if (here) p.push(`<circle class="agent" cx="${mx}" cy="${my}" r="13"/>`);
+      p.push(`<text class="arrow${here ? ' on' : ''}" x="${mx}" y="${my + 6}" text-anchor="middle">${ARROW[g]}</text>`);
+
+      if (S.showOpt) {
+        const opts = S.optActions[s].map((a) => ARROW[a]).join('');
+        p.push(`<text class="optarrow" x="${cx + 7}" y="${cy + C - 7}">${opts}</text>`);
+        p.push(`<text class="vstar" x="${cx + C - 7}" y="${cy + C - 7}" text-anchor="end">v* ${S.vStar[s].toFixed(2)}</text>`);
+        if (!S.optActions[s].includes(g)) {
+          p.push(`<rect class="bad" x="${cx + 1}" y="${cy + 1}" width="${C - 2}" height="${C - 2}" rx="7"/>`);
+        }
+      }
+
+      if (here) p.push(`<rect class="here" x="${cx + 1}" y="${cy + 1}" width="${C - 2}" height="${C - 2}" rx="7"/>`);
+      else if (S.visits[s]) p.push(`<rect class="path" x="${cx + 2}" y="${cy + 2}" width="${C - 4}" height="${C - 4}" rx="6"/>`);
+    }
+  }
+
+  document.getElementById('qsvg').innerHTML =
+    `<svg viewBox="-1 -1 ${w + 2} ${h + 2}" role="img" aria-label="상태·행동 가치 함수 Q">${p.join('')}</svg>`;
+  document.getElementById('scale').textContent = `±${scale.toFixed(2)}`;
+  document.getElementById('legend-note').textContent = S.mode === 'q'
+    ? (S.sample
+      ? '샘플 모델 버전입니다. 에이전트가 들고 있는 것은 이 Q 표 하나뿐이고, 정책은 ε-탐욕 규칙으로 그때그때 뽑습니다.'
+      : '가운데 화살표는 지금 Q를 탐욕화한 행동(대상 정책 π)이고, 실제 걸음은 ε-탐욕인 행동 정책 b로 뽑습니다.')
+    : (S.mode === 'off'
+      ? '대상 정책 π는 순수 탐욕(가운데 화살표), 걸음은 행동 정책 b(ε-탐욕)로 뽑습니다.'
+      : '가운데 화살표는 지금 Q를 탐욕화한 행동입니다. SARSA는 이 화살표를 ε만큼 흐린 정책 자신을 평가합니다.');
+}
+
+/* ---------- 그래프 ---------- */
+
+const CHART_H = 190;
+const M = { left: 60, right: 34, top: 12, bottom: 34 };
+
+function renderChart() {
+  const box = document.getElementById('chart');
+  const h = S.history;
+  const ghosts = Object.entries(S.ghosts).filter(([m]) => m !== S.mode);
+
+  const w = Math.max(280, box.clientWidth || 600);
+  const x0 = M.left, x1 = w - M.right, y0 = M.top, y1 = CHART_H - M.bottom;
+
+  let N = Math.max(h.length, 10);
+  for (const [, g] of ghosts) N = Math.max(N, g.length);
+  const xHi = Math.log10(N);
+  const xOf = (e) => x0 + (xHi > 0 ? Math.log10(Math.max(e, 1)) / xHi : 0) * (x1 - x0);
+
+  let lo = Infinity, hi = 0;
+  const scan = (arr) => {
+    for (const d of arr) {
+      if (d.err <= 0) continue;
+      if (d.err < lo) lo = d.err;
+      if (d.err > hi) hi = d.err;
+    }
+  };
+  scan(h);
+  for (const [, g] of ghosts) scan(g);
+  if (!isFinite(lo) || lo <= 0) { lo = 0.01; hi = Math.max(hi, 1); }
+  const loE = Math.floor(Math.log10(lo));
+  const hiE = Math.ceil(Math.log10(Math.max(hi, lo * 10)));
+  const span = (hiE - loE) || 1;
+  const yOf = (v) => y1 - ((Math.log10(Math.max(v, Math.pow(10, loE))) - loE) / span) * (y1 - y0);
+  const yMatch = (m) => y1 - (m / 10) * (y1 - y0);
+
+  const parts = [];
+
+  for (let e = loE; e <= hiE; e++) {
+    const y = yOf(Math.pow(10, e)).toFixed(1);
+    const label = e >= 0 ? String(Math.pow(10, e)) : Math.pow(10, e).toFixed(-e);
+    parts.push(`<line class="gridline" x1="${x0}" y1="${y}" x2="${x1}" y2="${y}"/>`);
+    parts.push(`<line class="tick" x1="${x0 - 4}" y1="${y}" x2="${x0}" y2="${y}"/>`);
+    parts.push(`<text x="${x0 - 8}" y="${y}" text-anchor="end" dominant-baseline="middle">${label}</text>`);
+  }
+
+  // 오른쪽 눈금 — 최적 행동 일치 칸 수
+  for (const m of [0, 5, 10]) {
+    const y = yMatch(m).toFixed(1);
+    parts.push(`<line class="tick" x1="${x1}" y1="${y}" x2="${x1 + 4}" y2="${y}"/>`);
+    parts.push(`<text class="match-axis" x="${x1 + 7}" y="${y}" dominant-baseline="middle">${m}</text>`);
+  }
+  parts.push(`<line class="full" x1="${x0}" y1="${yMatch(10).toFixed(1)}" x2="${x1}" y2="${yMatch(10).toFixed(1)}"/>`);
+
+  for (let e = 0; e <= Math.ceil(xHi); e++) {
+    const v = Math.pow(10, e);
+    if (v > N) break;
+    const x = xOf(v).toFixed(1);
+    parts.push(`<line class="tick" x1="${x}" y1="${y1}" x2="${x}" y2="${y1 + 4}"/>`);
+    parts.push(`<text x="${x}" y="${y1 + 15}" text-anchor="middle">${v.toLocaleString()}</text>`);
+  }
+  if (h.length > 0 && Math.log10(h.length) % 1 > 0.12) {
+    const x = xOf(h.length).toFixed(1);
+    parts.push(`<line class="tick" x1="${x}" y1="${y1}" x2="${x}" y2="${y1 + 4}"/>`);
+    parts.push(`<text x="${x}" y="${y1 + 15}" text-anchor="middle">${h.length.toLocaleString()}</text>`);
+  }
+
+  const polyline = (arr, cls) => {
+    if (arr.length < 2) return '';
+    const stride = Math.max(1, Math.ceil(arr.length / 400));
+    const pts = [];
+    for (let i = 0; i < arr.length; i += stride) pts.push(`${xOf(i + 1).toFixed(1)},${yOf(arr[i].err).toFixed(1)}`);
+    const last = arr.length - 1;
+    if ((last % stride) !== 0) pts.push(`${xOf(arr.length).toFixed(1)},${yOf(arr[last].err).toFixed(1)}`);
+    return `<polyline class="${cls}" points="${pts.join(' ')}"/>`;
+  };
+
+  // 앞서 돌려본 방식의 곡선을 회색 파선으로 남겨 견주게 한다
+  for (const [m, g] of ghosts) {
+    parts.push(polyline(g, 'ghost'));
+    if (g.length > 1) {
+      const gx = Math.min(xOf(g.length), x1 - 4).toFixed(1);
+      const gy = (yOf(g[g.length - 1].err) - 5).toFixed(1);
+      parts.push(`<text class="ghost-label" x="${gx}" y="${gy}" text-anchor="end">${MODE_NAME[m]}</text>`);
+    }
+  }
+
+  if (h.length > 1) {
+    const stride = Math.max(1, Math.ceil(h.length / 400));
+    const matchPts = [];
+    for (let i = 0; i < h.length; i += stride) matchPts.push(`${xOf(i + 1).toFixed(1)},${yMatch(h[i].match).toFixed(1)}`);
+    const last = h.length - 1;
+    if ((last % stride) !== 0) matchPts.push(`${xOf(h.length).toFixed(1)},${yMatch(h[last].match).toFixed(1)}`);
+    parts.push(`<polyline class="match" points="${matchPts.join(' ')}"/>`);
+    parts.push(polyline(h, 'line'));
+  }
+  if (h.length > 0 && h.length <= 40) {
+    for (let i = 0; i < h.length; i++) {
+      parts.push(`<circle class="dot" cx="${xOf(i + 1).toFixed(1)}" cy="${yOf(h[i].err).toFixed(1)}" r="2.2"/>`);
+    }
+  }
+  if (h.length === 0) {
+    parts.push(`<text x="${((x0 + x1) / 2).toFixed(1)}" y="${((y0 + y1) / 2).toFixed(1)}" text-anchor="middle">에피소드를 돌리면 여기에 그려집니다</text>`);
+  }
+
+  parts.push(`<rect class="frame" x="${x0}" y="${y0}" width="${x1 - x0}" height="${y1 - y0}"/>`);
+  parts.push(`<text class="axis-name" x="${((x0 + x1) / 2).toFixed(1)}" y="${CHART_H - 4}" text-anchor="middle">에피소드</text>`);
+  parts.push(`<text class="axis-name" transform="rotate(-90 14 ${((y0 + y1) / 2).toFixed(1)})" x="14" y="${((y0 + y1) / 2).toFixed(1)}" text-anchor="middle" dominant-baseline="middle">값의 오차</text>`);
+
+  const svg =
+    `<svg viewBox="0 0 ${w} ${CHART_H}" width="${w}" height="${CHART_H}"
+          role="img" aria-label="에피소드에 따른 값의 오차와 최적 행동 일치 수">${parts.join('')}</svg>`;
+
+  const cap = box.querySelector('figcaption');
+  box.innerHTML = '';
+  box.appendChild(cap);
+  box.insertAdjacentHTML('beforeend', svg);
+}
+
+/* ---------- 갱신 표 ---------- */
+
+const ROW_CAP = 10;
+
+function nextCellHead() {
+  if (S.mode === 'q') return 'max<sub>a</sub> Q(s′, ·)';
+  return 'Q(s′, A′)';
+}
+
+function targetHead() {
+  if (S.mode === 'q') return '목표 R + γ max Q';
+  if (S.mode === 'off') return '목표 ρ(R + γQ)';
+  return '목표 R + γQ(s′, A′)';
+}
+
+function renderReplay() {
+  const box = document.getElementById('replay');
+  const off = S.mode === 'off';
+  const cols = off ? 9 : 8;
+
+  if (S.phase === 'idle') {
+    box.innerHTML =
+      '<h2>걸음마다 일어나는 일</h2>' +
+      '<p class="sub" style="margin:0">「다음」을 누르면 시작 칸 (2, 0)에서 걷기 시작합니다. ' +
+      '처음에는 모든 Q가 0이라 정책도 무작위나 다름없습니다.</p>';
+    return;
+  }
+
+  const shown = S.rows.slice(-ROW_CAP);
+  const rows = shown.map((r) => {
+    const [y, x] = parse(r.s);
+    const [ny, nx] = parse(r.nextS);
+    const nextCell = r.final
+      ? '종료 · 0'
+      : (S.mode === 'q'
+        ? r.nextVal.toFixed(3)
+        : `${ARROW[r.nextA]} ${r.nextVal.toFixed(3)}`);
+    return `<tr class="${r.final ? 'final' : ''}">
+      <td>t = ${r.t}</td>
+      <td>(${y}, ${x})</td>
+      <td>${ACTION_NAME[r.a]}</td>
+      <td>${r.r.toFixed(0)}</td>
+      <td class="sep">(${ny}, ${nx}) · ${nextCell}</td>
+      ${off ? `<td class="rho">${r.rho === 0 ? '0' : r.rho.toFixed(3)}</td>` : ''}
+      <td>${r.target.toFixed(4)}</td>
+      <td>${r.before.toFixed(3)} <span class="arrow">→</span> ${r.after.toFixed(3)}</td>
+      <td>${ARROW[r.greedy]}</td>
+    </tr>`;
+  }).join('');
+
+  // SARSA 계열은 마지막 걸음이 아직 갱신되지 않은 채 memory 에 남아 있다
+  let pending = '';
+  if (S.mode !== 'q' && S.phase === 'walking' && S.memory.length > 0) {
+    const m = S.memory[S.memory.length - 1];
+    if (m.a !== null) {
+      const [y, x] = parse(m.s);
+      pending = `<tr class="pending">
+        <td>t = ${m.t}</td>
+        <td>(${y}, ${x})</td>
+        <td>${ACTION_NAME[m.a]}</td>
+        <td>${m.r.toFixed(0)}</td>
+        <td class="sep" colspan="${cols - 4}" style="text-align:left">갱신 대기 — 다음 행동 A′가 정해져야 계산할 수 있습니다</td>
+      </tr>`;
+    }
+  }
+
+  const omitted = S.rows.length > ROW_CAP
+    ? `<p class="sub" style="margin:8px 0 0">앞의 ${S.rows.length - ROW_CAP}번 갱신은 접었습니다.</p>` : '';
+
+  const table =
+    `<table class="terms">
+       <thead><tr>
+         <th>걸음</th><th>상태 s</th><th>행동 a</th><th>R</th>
+         <th class="sep">다음 상태 s′ · ${nextCellHead()}</th>
+         ${off ? '<th>ρ</th>' : ''}
+         <th>${targetHead()}</th><th>Q(s, a) 갱신</th><th>π 개선</th>
+       </tr></thead>
+       <tbody>${rows}${pending}</tbody>
+     </table>${omitted}`;
+
+  const head = S.phase === 'walking'
+    ? `<h2>걷는 중 — ${S.stepsInEpisode}걸음째 · 갱신 ${S.rows.length}번</h2>`
+    : `<h2>${S.episodes.toLocaleString()}번째 에피소드 — ${S.lastLen}걸음${S.truncated ? ' (안전장치로 끊음)' : ''}</h2>`;
+
+  const sub =
+    `<p class="sub">${MODE_NAME[S.mode]}${S.mode === 'q' && S.sample ? ' · 샘플 모델' : ''} · ` +
+    `γ = ${S.gamma.toFixed(2)} · α = ${S.alpha.toFixed(2)} · ε = ${S.epsilon.toFixed(2)}</p>`;
+
+  const note = S.mode === 'q'
+    ? '<p class="note">갱신이 <b>한 걸음 안에서</b> 끝납니다. 다음 상태의 값으로 쓰는 것이 ' +
+      '<code>max<sub>a</sub>Q(s′,a)</code>이고, 이건 지금 갖고 있는 Q 표를 훑으면 나오므로 ' +
+      '다음 행동을 기다릴 이유도, 어느 정책에서 뽑았는지 보정할 이유도 없습니다.</p>'
+    : '<p class="note">맨 아래 파란 줄이 <b>갱신 대기</b>입니다. SARSA는 <code>Q(s′,A′)</code>가 필요하므로 ' +
+      '다음 행동이 정해질 때까지 한 걸음을 미뤄둡니다 — 이것이 <code>deque(maxlen=2)</code>의 정체입니다. ' +
+      (off
+        ? '오른쪽 <code>ρ</code> 칸은 <b>매 걸음 새로 계산</b>한 한 걸음분 가중치입니다. ' +
+          '5장처럼 곱해 쌓지 않으므로 값이 크게 튀지 않습니다.'
+        : '초록 줄은 목표에 닿은 뒤 더미 데이터로 한 번 더 부른 갱신으로, 마지막 (S, A)까지 손봅니다.') +
+      '</p>';
+
+  box.innerHTML = head + sub + table + note;
+}
+
+/* ---------- 그리기 묶음 ---------- */
+
+function render() {
+  renderGrid();
+
+  document.getElementById('ep').textContent = S.episodes.toLocaleString();
+  document.getElementById('len').textContent =
+    S.phase === 'walking' ? S.stepsInEpisode : (S.lastLen === null ? '—' : S.lastLen);
+
+  const m = S.history.length ? S.history[S.history.length - 1] : null;
+  document.getElementById('match').textContent = m ? `${m.match}/10` : '—';
+  document.getElementById('err').textContent = m ? m.err.toFixed(3) : '—';
+
+  const flag = document.getElementById('flag');
+  if (S.phase === 'walking') {
+    flag.textContent = `걷는 중 · ${S.stepsInEpisode}걸음째`;
+    flag.className = 'flag';
+  } else if (S.phase === 'ended') {
+    if (S.truncated) {
+      flag.textContent = `${MAX_STEPS}걸음에서 끊음`;
+      flag.className = 'flag warn';
+    } else {
+      flag.textContent = 'Q 갱신 · 정책 개선 완료';
+      flag.className = 'flag done';
+    }
+  } else {
+    flag.textContent = '시작 전';
+    flag.className = 'flag';
+  }
+
+  renderChart();
+  renderReplay();
+}
+
+/* ---------- 이벤트 ---------- */
+
+function bindRange(id, apply) {
+  const input = document.getElementById(id);
+  const out = document.getElementById(id + '-val');
+  input.addEventListener('input', () => {
+    apply(Number(input.value));
+    out.textContent = Number(input.value).toFixed(2);
+    reset();   // 도중에 바꾸면 헷갈리므로 처음부터 다시
+  });
+}
+
+bindRange('gamma', (v) => { S.gamma = v; });
+bindRange('epsilon', (v) => { S.epsilon = v; });
+bindRange('alpha', (v) => { S.alpha = v; });
+
+function bindSeg(id, apply) {
+  const seg = document.getElementById(id);
+  seg.addEventListener('click', (e) => {
+    const btn = e.target.closest('button');
+    if (!btn) return;
+    for (const b of seg.querySelectorAll('button')) {
+      b.setAttribute('aria-pressed', String(b === btn));
+    }
+    apply(btn.dataset.v);
+  });
+}
+
+/* 방식을 바꾸기 전에 지금까지의 곡선을 남겨 둔다 */
+function keepCurve() {
+  if (S.history.length > 1) S.ghosts[S.mode] = S.history.slice();
+}
+
+bindSeg('mode', (v) => {
+  keepCurve();
+  S.mode = v;
+  const ctl = document.getElementById('sample-ctl');
+  const box = document.getElementById('sample');
+  box.disabled = v !== 'q';
+  ctl.classList.toggle('off', v !== 'q');
+  reset();
+});
+
+bindSeg('grain', (v) => { S.grain = v; render(); });
+
+document.getElementById('opt').addEventListener('change', (e) => {
+  S.showOpt = e.target.checked;
+  render();
+});
+
+document.getElementById('sample').addEventListener('change', (e) => {
+  S.sample = e.target.checked;
+  reset();
+});
+
+document.getElementById('step').addEventListener('click', step);
+document.getElementById('run100').addEventListener('click', () => runEpisodes(100));
+document.getElementById('run1000').addEventListener('click', () => runEpisodes(1000));
+document.getElementById('run10000').addEventListener('click', () => runEpisodes(10000));
+document.getElementById('reset').addEventListener('click', () => { keepCurve(); reset(); });
+
+window.addEventListener('resize', () => renderChart());
+
+document.addEventListener('keydown', (e) => {
+  if (e.code !== 'Space') return;
+  const t = e.target;
+  if (t && (t.tagName === 'INPUT' || t.tagName === 'BUTTON')) return;
+  e.preventDefault();
+  step();
+});
+
+reset();
+</script>
+</body>
+</html>
