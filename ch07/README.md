@@ -318,6 +318,20 @@ class QNet(Model):
     - `Q_target`은 일정 주기마다 복사해 두는 사본이라 그동안 목표가 고정됨
 - 예제 코드: [`s05_q_learning_nn.py`](s05_q_learning_nn.py) (`lr=0.01`, `ε=0.1`, 1,000 에피소드)
 ```python
+for episode in range(episodes):
+    state = env.reset()
+    state = one_hot(state)
+    done = False
+
+    while not done:
+        action = agent.get_action(state)
+        next_state, reward, done = env.step(action)
+        next_state = one_hot(next_state)
+
+        loss = agent.update(state, action, reward, next_state, done)  # 매 걸음 호출
+        state = next_state
+```
+```python
 def update(self, state, action, reward, next_state, done):
     if done:
         next_q = np.zeros(1)          # 목표 상태에서의 Q는 항상 0
