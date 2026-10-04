@@ -301,6 +301,8 @@ class QNet(Model):
   - `Q(S_t,A_t) ← Q(S_t,A_t) + α{ T - Q(S_t,A_t) }`
   - **볼 곳**: 이 형태가 곧 '`Q(S_t,A_t)`를 **`T`에 가까워지게** 하라'는 뜻
   - 즉 `T`를 정답으로 삼는 **회귀 문제**로 볼 수 있음 → 손실은 `(T - Q)²`
+    - 지도 학습: 사람이 준 고정된 정답 `y`와 모델 출력의 손실
+    - Q 러닝: **스스로 만든 임시 정답 `T`** 와 모델 출력 `Q(S_t,A_t)`의 손실
   - 표 방식의 `α`가 신경망에서는 **학습률 `lr`** 로 바뀜
 - 갱신식에서 목표와 예측의 자리
   ```
@@ -332,22 +334,41 @@ for episode in range(episodes):
         state = next_state
 ```
 ```python
-def update(self, state, action, reward, next_state, done):
-    if done:
-        next_q = np.zeros(1)          # 목표 상태에서의 Q는 항상 0
-    else:
-        next_qs = self.qnet(next_state)
-        next_q = next_qs.max(axis=1)
-        next_q.unchain()              # next_q를 역전파 대상에서 제외
+class QLearningAgent:
+    def __init__(self):
+        self.gamma = 0.9
+        self.lr = 0.01
+        self.epsilon = 0.1
+        self.action_size = 4
 
-    target = self.gamma * next_q + reward
-    qs = self.qnet(state)
-    q = qs[:, action]                 # 실제로 고른 행동의 Q만 꺼냄
-    loss = F.mean_squared_error(target, q)
+        self.qnet = QNet()                        # 표 대신 신경망
+        self.optimizer = optimizers.SGD(self.lr)
+        self.optimizer.setup(self.qnet)
 
-    self.qnet.cleargrads()
-    loss.backward()
-    self.optimizer.update()
+    def get_action(self, state_vec):
+        if np.random.rand() < self.epsilon:
+            return np.random.choice(self.action_size)
+        else:
+            qs = self.qnet(state_vec)             # 행동 선택에도 qnet을 씀
+            return qs.data.argmax()
+
+    def update(self, state, action, reward, next_state, done):
+        if done:
+            next_q = np.zeros(1)                  # 목표 상태에서의 Q는 항상 0
+        else:
+            next_qs = self.qnet(next_state)
+            next_q = next_qs.max(axis=1)
+            next_q.unchain()                      # next_q를 역전파 대상에서 제외
+
+        target = self.gamma * next_q + reward
+        qs = self.qnet(state)
+        q = qs[:, action]                         # 실제로 고른 행동의 Q만 꺼냄
+        loss = F.mean_squared_error(target, q)
+
+        self.qnet.cleargrads()
+        loss.backward()
+        self.optimizer.update()
+        return loss.data
 ```
 - **가장 중요한 한 줄이 `next_q.unchain()`**
   - `target`도 같은 신경망에서 나온 값이라 그대로 두면 **정답 쪽으로도 기울기가 흐름**
