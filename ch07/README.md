@@ -442,6 +442,13 @@ class QLearningAgent:
   |출력 |`L.Linear(4)` |`L.Linear(2)` |
   |환경 |`GridWorld()` |`gym.make('CartPole-v1')` |
   - 나머지(`get_action`, `update`, `unchain()`)는 그대로. 비교를 위해 층 크기·`γ`·옵티마이저는 8장 DQN과 맞춤
+- 입력은 실수 4개를 그대로 넣음
+```python
+state = [ 0.012, -0.034, 0.045, 0.021 ]   # 위치, 속도, 각도, 각속도
+qs = self.qnet(state[np.newaxis, :])      # (1, 4) 그대로 입력
+```
+  - 카트 폴의 값은 **크기 자체가 의미** — 각도 `0.04`는 `0.02`보다 두 배 기울었다는 뜻
+  - 그대로 넣어야 신경망이 이 크기 관계를 활용함(그리드 월드 좌표는 크기에 뜻이 없어 원핫이 필요했음)
 - 예제 코드: [`s06_cartpole_nn.py`](s06_cartpole_nn.py) (300 에피소드)
   - `python s06_cartpole_nn.py` — 학습 후 보상 그래프를 띄움
   - `python s06_cartpole_nn.py --live` — 학습 중인 카트 폴과 보상 그래프를 **한 창에 실시간으로** 보여줌(최고 걸음과 그 에피소드도 표시)
