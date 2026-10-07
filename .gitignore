@@ -170,3 +170,9 @@ dmypy.json
 *.synctex.gz
 *.toc
 *.xdv
+
+# 스트리트 파이터 2: 학습 결과와 롬 파일은 올리지 않는다(롬은 저작물)
+runs/
+data/
+*.smd
+!sf2/integration/**/*.json

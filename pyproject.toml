@@ -8,6 +8,7 @@ dependencies = [
     "matplotlib>=3.9",
     "torch>=2.6",
     "gymnasium[classic-control]>=1.0",
+    "stable-retro>=1.0.1",
 ]
 
 [dependency-groups]
