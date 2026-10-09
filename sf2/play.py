@@ -19,8 +19,10 @@ def main():
     args = p.parse_args()
 
     env = make_env(render_mode='human')
-    qnet = QNet(env.action_space.n)
-    qnet.load_state_dict(torch.load(args.model, map_location='cpu'))
+    params = torch.load(args.model, map_location='cpu')
+    dueling = any(k.startswith('v.') for k in params)  # Dueling DQN이면 V 갈래가 있다
+    qnet = QNet(env.action_space.n, dueling=dueling)
+    qnet.load_state_dict(params)
     qnet.eval()
 
     for episode in range(args.episodes):

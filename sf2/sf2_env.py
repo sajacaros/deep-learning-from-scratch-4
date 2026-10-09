@@ -113,6 +113,46 @@ class Discretizer(gym.ActionWrapper):
         return self._table[act].copy()
 
 
+class PygameViewer(gym.Wrapper):
+    """에뮬레이터가 내는 매 프레임을 pygame 창에 그린다.
+    stable-retro의 human 렌더링은 pyglet+OpenGL(libGLU)이 필요해 WSL에서 막히기 쉬워 대신 쓴다."""
+    def __init__(self, env, scale=3, fps=60):
+        super().__init__(env)
+        import pygame
+        self.pygame = pygame
+        self.scale, self.fps = scale, fps
+        self.screen = None
+        self.clock = pygame.time.Clock()
+
+    def _show(self, frame):
+        pg = self.pygame
+        h, w = frame.shape[:2]
+        if self.screen is None:
+            pg.init()
+            self.screen = pg.display.set_mode((w * self.scale, h * self.scale))
+            pg.display.set_caption('Street Fighter II')
+        pg.event.pump()  # 창이 '응답 없음'이 되지 않게 이벤트를 비운다
+        surf = pg.surfarray.make_surface(frame.swapaxes(0, 1))
+        self.screen.blit(pg.transform.scale(surf, self.screen.get_size()), (0, 0))
+        pg.display.flip()
+        self.clock.tick(self.fps)
+
+    def reset(self, **kwargs):
+        obs, info = self.env.reset(**kwargs)
+        self._show(obs)
+        return obs, info
+
+    def step(self, action):
+        obs, reward, terminated, truncated, info = self.env.step(action)
+        self._show(obs)
+        return obs, reward, terminated, truncated, info
+
+    def close(self):
+        if self.screen is not None:
+            self.pygame.quit()
+        super().close()
+
+
 def make_env(render_mode=None, discrete=True):
     """참고 프로젝트와 같은 환경. discrete=False면 원본처럼 MultiBinary(12)를 받는다(PPO용)."""
     # integration/의 data.json·scenario.json·.state가 stable-retro 기본 파일보다 먼저 쓰인다
@@ -124,9 +164,11 @@ def make_env(render_mode=None, discrete=True):
         inttype=retro.data.Integrations.ALL,
         use_restricted_actions=retro.Actions.FILTERED,
         obs_type=retro.Observations.IMAGE,
-        render_mode=render_mode,
+        render_mode=None,
     )
-    env = StreetFighterWrapper(env, rendering=(render_mode == 'human'))
+    if render_mode == 'human':
+        env = PygameViewer(env)  # 속도는 PygameViewer가 60fps로 맞추므로 rendering은 끈다
+    env = StreetFighterWrapper(env)
     if discrete:
         env = Discretizer(env)
     return env
