@@ -1,13 +1,13 @@
 """학습한 DQN이 싸우는 모습을 창으로 보기.
 
-  uv run python sf2/play.py runs/dqn/qnet_final.pt --episodes 3
+  uv run python sf2/play.py runs/dueling/qnet_best.pt --episodes 3
 """
 import argparse
 
 import numpy as np
 import torch
 
-from dqn import QNet
+from dqn import QNet, mask_specials, random_action
 from sf2_env import make_env
 
 
@@ -25,15 +25,17 @@ def main():
     qnet.load_state_dict(params)
     qnet.eval()
 
+    rng = np.random.default_rng()
     for episode in range(args.episodes):
         state, info = env.reset()
         done, total_reward = False, 0.0
         while not done:
             if np.random.rand() < args.epsilon:
-                action = env.action_space.sample()
+                action = random_action(state, rng)
             else:
                 with torch.no_grad():
-                    action = qnet(torch.from_numpy(state).unsqueeze(0)).argmax().item()
+                    x = torch.from_numpy(state).unsqueeze(0)
+                    action = mask_specials(qnet(x), x).argmax().item()
             state, reward, terminated, truncated, info = env.step(action)
             done = terminated or truncated
             total_reward += reward

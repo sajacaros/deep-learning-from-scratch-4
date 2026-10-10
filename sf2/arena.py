@@ -65,8 +65,8 @@ class FrameSink(gym.Wrapper):
 def worker(model_path, shm, conn, epsilon):
     import torch
     import stable_retro as retro
-    from dqn import QNet
-    from sf2_env import INTEGRATION_DIR, STATE, GAME, StreetFighterWrapper, Discretizer
+    from dqn import QNet, mask_specials, random_action as dqn_random_action
+    from sf2_env import INTEGRATION_DIR, STATE, GAME, StreetFighterWrapper, MoveSet, action_mask
 
     torch.set_num_threads(1)  # 네 프로세스가 CPU를 나눠 쓰므로
     frame = np.frombuffer(shm, dtype=np.uint8).reshape(H, W, 3)
@@ -75,16 +75,31 @@ def worker(model_path, shm, conn, epsilon):
     env = retro.make(game=GAME, state=STATE, inttype=retro.data.Integrations.ALL,
                      use_restricted_actions=retro.Actions.FILTERED,
                      obs_type=retro.Observations.IMAGE, render_mode=None)
-    env = Discretizer(StreetFighterWrapper(FrameSink(env, frame)))
+    env = FrameSink(env, frame)
 
-    params = torch.load(model_path, map_location='cpu')
-    dueling = any(k.startswith('v.') for k in params)
-    qnet = QNet(env.action_space.n, dueling=dueling)
-    qnet.load_state_dict(params)
-    qnet.eval()
+    env = MoveSet(StreetFighterWrapper(env))
+    random_action = lambda rng, state: dqn_random_action(state, rng)
+    if model_path.endswith('.zip'):  # PPO(stable-baselines3) 체크포인트
+        from sb3_contrib import MaskablePPO
+        model = MaskablePPO.load(model_path, device='cpu', custom_objects={
+            'learning_rate': 0.0, 'lr_schedule': lambda _: 0.0, 'clip_range': lambda _: 0.0})
+        kind = 'PPO'
+        act = lambda state: int(model.predict(state, deterministic=False, action_masks=action_mask(state))[0])
+    else:
+        params = torch.load(model_path, map_location='cpu')
+        dueling = any(k.startswith('v.') for k in params)
+        qnet = QNet(env.action_space.n, dueling=dueling)
+        qnet.load_state_dict(params)
+        qnet.eval()
+        kind = 'Dueling' if dueling else ''
+
+        def act(state):
+            with torch.no_grad():
+                x = torch.from_numpy(state).unsqueeze(0)
+                return mask_specials(qnet(x), x).argmax().item()
 
     state, info = env.reset()  # 첫 화면을 띄워 둔다
-    conn.send(('ready', 'Dueling' if dueling else ''))
+    conn.send(('ready', kind))
     while True:
         msg = conn.recv()
         if msg == 'quit':
@@ -95,17 +110,13 @@ def worker(model_path, shm, conn, epsilon):
         rng = np.random.default_rng(seed)
         done, total_reward = False, 0.0
         for _ in range(rng.integers(0, MAX_RANDOM + 1)):  # 무작위 시작(모든 모델이 같은 행동열)
-            state, reward, terminated, truncated, info = env.step(int(rng.integers(env.action_space.n)))
+            state, reward, terminated, truncated, info = env.step(random_action(rng, state))
             total_reward += reward
             done = terminated or truncated
             if done:
                 break
         while not done:
-            if np.random.rand() < epsilon:
-                action = env.action_space.sample()
-            else:
-                with torch.no_grad():
-                    action = qnet(torch.from_numpy(state).unsqueeze(0)).argmax().item()
+            action = env.action_space.sample() if np.random.rand() < epsilon else act(state)
             state, reward, terminated, truncated, info = env.step(action)
             done = terminated or truncated
             total_reward += reward

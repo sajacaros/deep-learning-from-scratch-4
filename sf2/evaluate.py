@@ -1,7 +1,8 @@
-"""저장한 체크포인트마다 여러 판 싸워 승률을 잰다(기본 ε=0).
+"""저장한 체크포인트마다 여러 판 싸워 승률을 잰다. DQN(qnet_*.pt)은 기본 ε=0, PPO(ppo_*.zip)는 정책에서 행동을 뽑는다.
 
-  uv run python sf2/evaluate.py runs/dqn runs/double runs/dueling runs/double_dueling --episodes 100
-  uv run python sf2/evaluate.py runs/dueling_lrdecay/qnet_final.pt ...   # 파일을 직접 줘도 된다
+  uv run python sf2/evaluate.py runs/dqn runs/double runs/dueling runs/double_dueling --episodes 200
+  uv run python sf2/evaluate.py runs/dueling/qnet_final.pt ...   # 파일을 직접 줘도 된다
+  uv run python sf2/evaluate.py runs/ppo --episodes 200          # PPO도 같은 방식으로(--deterministic이면 확률이 가장 큰 행동)
 
 결과 파일 옆에 <out>_actions.csv로 체크포인트별 행동 횟수도 남긴다(무작위 시작 구간은 빼고 모델이 고른 것만).
 
@@ -23,26 +24,38 @@ import numpy as np
 
 def evaluate(job):
     import torch
-    from dqn import QNet
-    from sf2_env import make_env
+    from dqn import QNet, mask_specials, random_action
+    from sf2_env import action_mask, make_env
 
-    run, ckpt, episodes, max_random, device, seed, epsilon = job
+    run, ckpt, episodes, max_random, device, seed, epsilon, deterministic = job
     torch.set_num_threads(1)
+    torch.manual_seed(seed)
     rng = np.random.default_rng(seed)
     env = make_env()
-    params = torch.load(ckpt, map_location=device)
-    qnet = QNet(env.action_space.n, dueling=any(k.startswith('v.') for k in params)).to(device)
-    qnet.load_state_dict(params)
-    qnet.eval()
+    if ckpt.endswith('.zip'):  # PPO(stable-baselines3). 학습률·클리핑 스케줄은 평가에 필요 없어 상수로 바꿔 읽는다
+        from sb3_contrib import MaskablePPO
+        model = MaskablePPO.load(ckpt, device=device, custom_objects={
+            'learning_rate': 0.0, 'lr_schedule': lambda _: 0.0, 'clip_range': lambda _: 0.0})
+        policy = lambda state: int(model.predict(state, deterministic=deterministic, action_masks=action_mask(state))[0])
+    else:
+        params = torch.load(ckpt, map_location=device)
+        qnet = QNet(env.action_space.n, dueling=any(k.startswith('v.') for k in params)).to(device)
+        qnet.load_state_dict(params)
+        qnet.eval()
 
-    m = re.search(r'qnet_(\d+)\.pt', ckpt)
-    step = int(m.group(1)) if m else os.path.splitext(os.path.basename(ckpt))[0].replace('qnet_', '')
+        def policy(state):
+            with torch.no_grad():
+                x = torch.from_numpy(state).unsqueeze(0).to(device)
+                return mask_specials(qnet(x), x).argmax().item()
+
+    m = re.search(r'(?:qnet_|ppo_)(\d+)(?:_steps)?\.(?:pt|zip)$', ckpt)
+    step = int(m.group(1)) if m else re.sub(r'^(qnet|ppo)_', '', os.path.splitext(os.path.basename(ckpt))[0])
     rows = []
     for episode in range(episodes):
         state, info = env.reset()
         done, total_reward, length = False, 0.0, 0
         for _ in range(rng.integers(0, max_random + 1)):  # random start
-            state, reward, terminated, truncated, info = env.step(int(rng.integers(env.action_space.n)))
+            state, reward, terminated, truncated, info = env.step(random_action(state, rng))
             total_reward += reward
             length += 1
             done = terminated or truncated
@@ -52,10 +65,9 @@ def evaluate(job):
         repeats, prev = 0, None
         while not done:
             if rng.random() < epsilon:
-                action = int(rng.integers(env.action_space.n))
+                action = random_action(state, rng)
             else:
-                with torch.no_grad():
-                    action = qnet(torch.from_numpy(state).unsqueeze(0).to(device)).argmax().item()
+                action = policy(state)
             counts[action] += 1
             repeats += action == prev
             prev = action
@@ -76,6 +88,7 @@ def main():
     p.add_argument('--episodes', type=int, default=100)
     p.add_argument('--max-random', type=int, default=30)
     p.add_argument('--epsilon', type=float, default=0.0)  # Nature DQN의 평가는 0.05
+    p.add_argument('--deterministic', action='store_true')  # PPO만: 뽑지 않고 확률이 가장 큰 행동
     p.add_argument('--workers', type=int, default=40)
     p.add_argument('--device', default='cpu')
     p.add_argument('--out', default='runs/eval.csv')
@@ -83,17 +96,17 @@ def main():
 
     jobs = []
     for run in args.runs:
-        if run.endswith('.pt'):
+        if run.endswith(('.pt', '.zip')):
             ckpts, run = [run], os.path.dirname(run)
         else:
-            ckpts = glob.glob(os.path.join(run, 'qnet_[0-9]*.pt'))
+            ckpts = glob.glob(os.path.join(run, 'qnet_[0-9]*.pt')) + glob.glob(os.path.join(run, 'ppo_*_steps.zip'))
         for ckpt in ckpts:
             # 한 체크포인트를 여러 조각으로 나눠 프로세스를 고르게 쓴다
             n_chunks = max(1, args.episodes // 10)
             for c in range(n_chunks):
                 n = args.episodes // n_chunks + (c < args.episodes % n_chunks)
                 jobs.append((os.path.basename(run.rstrip('/')), ckpt, n, args.max_random, args.device,
-                             zlib.crc32(f'{ckpt}:{c}'.encode()), args.epsilon))
+                             zlib.crc32(f'{ckpt}:{c}'.encode()), args.epsilon, args.deterministic))
     print(f'{len(jobs)} jobs, {args.workers} workers', flush=True)
 
     rows = []
@@ -110,8 +123,7 @@ def main():
             f.write(','.join(f'{v:.4f}' if isinstance(v, float) else str(v) for v in r[:8]) + '\n')
 
     # 체크포인트별 행동 분포: 이긴 판·진 판을 나눠 센다
-    from sf2_env import ACTIONS
-    names = ['+'.join(a) if a else 'NOOP' for a in ACTIONS]
+    from sf2_env import ACTION_NAMES as names
     acts = {}
     for r in rows:
         a = acts.setdefault((r[0], r[1]), {'win': np.zeros(len(names)), 'lose': np.zeros(len(names)), 'rep': 0})

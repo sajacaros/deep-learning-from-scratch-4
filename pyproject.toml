@@ -10,6 +10,7 @@ dependencies = [
     "gymnasium[classic-control]>=1.0",
     "stable-retro>=1.0.1",
     "stable-baselines3>=2.9.0",
+    "sb3-contrib>=2.9.0",
 ]
 
 [dependency-groups]
