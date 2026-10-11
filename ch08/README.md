@@ -503,6 +503,7 @@ if episode % sync_interval == 0:   # 20 에피소드마다
   ```bash
   uv run python sf2/dqn.py --random-start 30 --lr-end 1e-5 --eval-interval 50000 --device cuda --out runs/dqn
   uv run python sf2/dqn.py --double --dueling --random-start 30 --lr-end 1e-5 --eval-interval 50000 --device cuda --out runs/double_dueling
+  uv run python sf2/dqn.py --double --dueling --mix --random-start 30 --lr-end 1e-5 --eval-interval 50000 --device cuda --out runs/double_dueling_mix
   ```
   - `--eval-interval 50000` — 5만 걸음마다 따로 띄운 프로세스에서 100판(`ε=0.05`)을 돌려 가장 좋은 모델을 `qnet_best.pt`로 남김
 - 상대: 기본은 바이슨 하나. `--mix`를 주면 판마다 `TRAIN_STATES` 11개 중 하나를 고름(`StateMix`)
@@ -543,7 +544,17 @@ if episode % sync_interval == 0:   # 20 에피소드마다
   |승률(%) |70 |12 |45 |30 |57 |1 |16 |22 |35 |31 |1 |22 |44 |
   - 류·사가트에게는 거의 못 이기고, 학습한 바이슨(44%)보다 높은 상대는 가일·춘리·달심뿐
   - 같은 바이슨이라도 Ladder 상태에서는 44% → 22%. 상대가 같아도 학습한 저장 상태 하나에 맞춰진 몫이 있음(추정)
-  - 여러 상대를 섞어 학습하는 것이 `--mix`
+- **섞어 학습해도 DQN은 나아지지 않음** — `--mix`로 4종을 다시 학습(100만 걸음), 마지막 모델을 상대마다 200판
+  |승률(%) |학습한 11명 평균 |달심(처음 봄) |바이슨(기본) |
+  |:--|--:|--:|--:|
+  |double_dueling(바이슨만) |25.9 |57 |44 |
+  |dqn `--mix` |21.0 |30 |15 |
+  |dueling `--mix` |18.3 |10 |9 |
+  |double `--mix` |10.6 |46 |18 |
+  |double_dueling `--mix` |3.0 |34 |2 |
+  - 상대가 11명으로 늘어 한 상대당 경험이 1/11로 줄어듦. 100만 걸음으로는 모자란 것으로 보임(추정)
+  - double_dueling `--mix`는 마지막 모델만 무너짐. 70만~100만 걸음 평균은 달심 55%, 바이슨(기본) 20%
+  - 류·사가트는 어느 모델도 2% 이하. 9장 부록의 PPO는 섞어 학습하면 나아짐
 - 남은 한계(추정)
   - `γ=0.94`면 앞을 약 17걸음(100프레임 남짓)만 내다봄 → 라운드 끝의 승패 보상이 거의 전해지지 않음
   - `ε`이 0.05로 내려간 뒤에는 버퍼에 자기 정책이 만든 비슷한 경험만 쌓임
