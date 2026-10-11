@@ -34,14 +34,25 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
 
-from sf2_env import N_BASIC, make_env, random_action, special_ready
+from sf2_env import N_BASIC, TRAIN_STATES, make_env, random_action, specials_ready
 
 
 def mask_specials(qs, state):
     """쿨타임 중인 상태의 필살기 Q 값을 -inf로 둬 max·argmax에서 빠지게 한다."""
     qs = qs.clone()
-    qs[~special_ready(state), N_BASIC:] = float('-inf')
+    qs[..., N_BASIC:] = qs[..., N_BASIC:].masked_fill(~specials_ready(state), float('-inf'))
     return qs
+
+
+def load_qnet(path, device='cpu'):
+    """저장한 가중치로 QNet을 만든다. 입력 채널 수(쿨타임 채널 1개 또는 3개)와 Dueling 여부는 가중치 모양에서 읽는다."""
+    params = torch.load(path, map_location=device)
+    dueling = any(k.startswith('v.') for k in params)
+    in_shape = (100, 128, params['conv.0.weight'].shape[1])
+    qnet = QNet(params[('a' if dueling else 'fc') + '.2.weight'].shape[0], in_shape, dueling).to(device)
+    qnet.load_state_dict(params)
+    qnet.eval()
+    return qnet
 
 
 class ReplayBuffer:
@@ -73,7 +84,7 @@ class ReplayBuffer:
 
 
 class QNet(nn.Module):  # 신경망 클래스
-    def __init__(self, action_size, in_shape=(100, 128, 4), dueling=False):
+    def __init__(self, action_size, in_shape=(100, 128, 6), dueling=False):
         super().__init__()
         h, w, c = in_shape
         self.conv = nn.Sequential(
@@ -104,7 +115,7 @@ class QNet(nn.Module):  # 신경망 클래스
 
 class DQNAgent:  # 에이전트 클래스
     def __init__(self, action_size, device, buffer_size=100_000, double=False, dueling=False,
-                 lr=1e-4, adam_eps=1e-8):
+                 lr=1e-4, adam_eps=1e-8, state_shape=(100, 128, 6)):
         self.gamma = 0.94          # 참고 프로젝트(PPO)와 같은 값
         self.lr = lr
         self.epsilon = 1.0
@@ -114,9 +125,9 @@ class DQNAgent:  # 에이전트 클래스
         self.double = double
         self.rng = np.random.default_rng()
 
-        self.replay_buffer = ReplayBuffer(buffer_size, self.batch_size, (100, 128, 4))
-        self.qnet = QNet(action_size, dueling=dueling).to(device)         # 원본 신경망
-        self.qnet_target = QNet(action_size, dueling=dueling).to(device)  # 목표 신경망
+        self.replay_buffer = ReplayBuffer(buffer_size, self.batch_size, state_shape)
+        self.qnet = QNet(action_size, state_shape, dueling).to(device)         # 원본 신경망
+        self.qnet_target = QNet(action_size, state_shape, dueling).to(device)  # 목표 신경망
         self.sync_qnet()
         self.optimizer = optim.Adam(self.qnet.parameters(), lr=self.lr, eps=adam_eps)
 
@@ -177,8 +188,9 @@ class Evaluator:
         with self.lock:
             self.pending[step] = [self.workers, []]
         for c in range(self.workers):
-            job = ('', ckpt, n, 30, 'cpu', step * 100 + c, self.epsilon)
-            self.pool.apply_async(evaluate, (job,), callback=lambda rows, s=step, k=ckpt: self._done(s, k, rows))
+            job = ('', ckpt, n, 30, 'cpu', step * 100 + c, self.epsilon, False)
+            self.pool.apply_async(evaluate, (job,), callback=lambda rows, s=step, k=ckpt: self._done(s, k, rows),
+                                  error_callback=lambda e, s=step: print(f'[eval] step {s} failed: {e!r}', flush=True))
 
     def _done(self, step, ckpt, rows):
         with self.lock:
@@ -224,20 +236,25 @@ def main():
     p.add_argument('--random-start', type=int, default=0)         # 판마다 처음 0~N걸음 무작위(0이면 안 함)
     p.add_argument('--double', action='store_true')
     p.add_argument('--dueling', action='store_true')
+    p.add_argument('--mix', action='store_true')  # 여러 상대(sf2_env.TRAIN_STATES)를 섞어 학습, 못 이기는 상대를 더 자주
+    p.add_argument('--shared-cooldown', action='store_true')    # 이전 방식: 필살기 하나를 쓰면 셋 다 쿨타임
+    p.add_argument('--special-bonus', type=float, default=0.0)    # 필살기가 맞으면 더하는 보상
+    p.add_argument('--special-penalty', type=float, default=0.0)  # 필살기가 헛치면 빼는 보상
     p.add_argument('--device', default='cuda' if torch.cuda.is_available() else 'cpu')
     p.add_argument('--out', default='runs/dqn')
     args = p.parse_args()
     os.makedirs(args.out, exist_ok=True)
 
-    env = make_env(random_start=args.random_start)
+    env = make_env(random_start=args.random_start, separate=not args.shared_cooldown, states=TRAIN_STATES if args.mix else None,
+                   bonus=args.special_bonus, penalty=args.special_penalty)
     agent = DQNAgent(env.action_space.n, args.device, args.buffer, args.double, args.dueling,
-                     args.lr, args.adam_eps)
+                     args.lr, args.adam_eps, env.observation_space.shape)
     evaluator = Evaluator(args.out, args.eval_episodes, args.eval_epsilon) if args.eval_interval else None
     eps_end, eps_steps = 0.05, int(args.steps * args.eps_decay)
     print(f'actions={env.action_space.n}, {vars(args)}')
 
     log = open(os.path.join(args.out, 'episodes.csv'), 'w')
-    log.write('episode,step,reward,win,length,specials,epsilon\n')
+    log.write('episode,step,reward,win,length,specials,epsilon,state\n')
 
     state, info = env.reset()
     episode, ep_reward, ep_len, ep_special = 0, 0.0, 0, 0
@@ -269,7 +286,7 @@ def main():
         if terminated or truncated:
             win = int(info['enemy_hp'] < 0)
             recent = (recent + [win])[-100:]
-            log.write(f'{episode},{step},{ep_reward:.4f},{win},{ep_len},{ep_special},{agent.epsilon:.3f}\n')
+            log.write(f"{episode},{step},{ep_reward:.4f},{win},{ep_len},{ep_special},{agent.epsilon:.3f},{info.get('start_state', '')}\n")
             log.flush()
             if episode % 10 == 0:
                 sps = step / (time.time() - t0)

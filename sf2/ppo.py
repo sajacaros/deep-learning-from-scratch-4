@@ -21,12 +21,13 @@ from stable_baselines3.common.callbacks import BaseCallback, CheckpointCallback
 from stable_baselines3.common.utils import set_random_seed
 from stable_baselines3.common.vec_env import SubprocVecEnv
 
-from sf2_env import N_BASIC, make_env
+from sf2_env import N_BASIC, TRAIN_STATES, make_env
 
 
-def env_fn(seed, random_start):
+def env_fn(seed, random_start, separate, bonus, penalty, mix):
     def _init():
-        env = make_env(random_start=random_start, seed=seed)
+        env = make_env(random_start=random_start, seed=seed, separate=separate, bonus=bonus, penalty=penalty,
+                       states=TRAIN_STATES if mix else None)
         env.reset(seed=seed)
         return env
     set_random_seed(seed)
@@ -43,7 +44,7 @@ class EpisodeLogger(BaseCallback):
     def __init__(self, out, num_envs):
         super().__init__()
         self.log = open(os.path.join(out, 'episodes.csv'), 'w')
-        self.log.write('episode,step,reward,win,length,specials\n')
+        self.log.write('episode,step,reward,win,length,specials,state\n')
         self.ep_reward = np.zeros(num_envs)
         self.ep_len = np.zeros(num_envs, dtype=int)
         self.ep_special = np.zeros(num_envs, dtype=int)  # 필살기를 고른 횟수
@@ -60,7 +61,8 @@ class EpisodeLogger(BaseCallback):
                 continue
             win = int(self.locals['infos'][i]['enemy_hp'] < 0)
             self.recent = (self.recent + [win])[-100:]
-            self.log.write(f'{self.episode},{self.num_timesteps},{self.ep_reward[i]:.4f},{win},{self.ep_len[i]},{self.ep_special[i]}\n')
+            state = self.locals['infos'][i].get('start_state', '')
+            self.log.write(f'{self.episode},{self.num_timesteps},{self.ep_reward[i]:.4f},{win},{self.ep_len[i]},{self.ep_special[i]},{state}\n')
             if self.episode % 50 == 0:
                 sps = self.num_timesteps / (time.time() - self.t0)
                 print(f'episode {self.episode:6d} | step {self.num_timesteps:9d} | reward {self.ep_reward[i]:7.3f} | '
@@ -79,12 +81,17 @@ def main():
     p.add_argument('--num-envs', type=int, default=16)
     p.add_argument('--save-interval', type=int, default=500_000)   # 모든 환경 합계 기준
     p.add_argument('--random-start', type=int, default=0)          # 판마다 처음 0~N걸음 무작위(0이면 안 함)
+    p.add_argument('--mix', action='store_true')  # 여러 상대(sf2_env.TRAIN_STATES)를 섞어 학습, 못 이기는 상대를 더 자주
+    p.add_argument('--shared-cooldown', action='store_true')    # 이전 방식: 필살기 하나를 쓰면 셋 다 쿨타임
+    p.add_argument('--special-bonus', type=float, default=0.0)    # 필살기가 맞으면 더하는 보상
+    p.add_argument('--special-penalty', type=float, default=0.0)  # 필살기가 헛치면 빼는 보상
     p.add_argument('--device', default='cuda')
     p.add_argument('--out', default='runs/ppo')
     args = p.parse_args()
     os.makedirs(args.out, exist_ok=True)
 
-    env = SubprocVecEnv([env_fn(i, args.random_start) for i in range(args.num_envs)])
+    env = SubprocVecEnv([env_fn(i, args.random_start, not args.shared_cooldown, args.special_bonus, args.special_penalty, args.mix)
+                         for i in range(args.num_envs)])
     model = MaskablePPO(
         'CnnPolicy', env,
         device=args.device,

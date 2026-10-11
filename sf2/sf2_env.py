@@ -17,6 +17,13 @@ import stable_retro as retro
 
 GAME = 'StreetFighterIISpecialChampionEdition-Genesis-v0'
 STATE = 'Champion.Level12.RyuVsBison'  # 최고 난이도, 류 vs 바이슨
+# 1인용 모드를 진행하며 만든 상대별 시작 상태(make_states.py). Level 숫자는 스테이지로, 뒤로 갈수록 CPU가 강하다
+LADDER = ['Champion.Level1.RyuVsGuile', 'Champion.Level2.RyuVsKen', 'Champion.Level3.RyuVsChunLi',
+          'Champion.Level4.RyuVsZangief', 'Champion.Level5.RyuVsDhalsim', 'Champion.Level6.RyuVsRyu',
+          'Champion.Level7.RyuVsHonda', 'Champion.Level8.RyuVsBlanka', 'Champion.Level9.RyuVsBalrog',
+          'Champion.Level10.RyuVsVega', 'Champion.Level11.RyuVsSagat', 'Champion.Level12.RyuVsBison.Ladder']
+HOLDOUT = ['Champion.Level5.RyuVsDhalsim', STATE]  # 학습에 쓰지 않고 평가에만 쓰는 상태(처음 보는 상대, 최고 난이도 바이슨)
+TRAIN_STATES = [s for s in LADDER if s not in HOLDOUT]
 INTEGRATION_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'integration')
 GRAY = np.array([0.299, 0.587, 0.114])  # RGB → 밝기
 
@@ -108,30 +115,39 @@ SPECIALS = {             # 필살기 커맨드(오른쪽을 볼 때). 한 걸음
 }
 ACTION_NAMES = ['+'.join(a) if a else 'NOOP' for a in BASIC_ACTIONS] + list(SPECIALS)
 N_BASIC = len(BASIC_ACTIONS)  # 이 번호부터가 필살기
-COOLDOWN = 20                 # 필살기를 쓰고 나서 다시 못 쓰는 걸음 수(세 필살기가 함께 씀)
+COOLDOWN = 20                 # 필살기를 쓰고 나서 다시 못 쓰는 걸음 수
+HIT_WINDOW = [10, 4, 4]       # 필살기를 쓴 뒤 이 걸음 안에 피해가 나면 명중으로 본다(파동권은 날아가는 시간이 있어 길게)
 
 
-def special_ready(state):
-    """상태의 네 번째 채널(남은 쿨타임)이 0이면 필살기를 쓸 수 있다. 배치(numpy·torch)도 받는다."""
-    return state[..., 0, 0, -1] == 0
-
-
-def random_action(state, rng):
-    """쓸 수 있는 행동 중에서 무작위로 고른다(필살기가 맨 뒤 번호라 쿨타임 중이면 앞쪽만)."""
-    return int(rng.integers(len(ACTION_NAMES) if special_ready(state) else N_BASIC))
+def specials_ready(state):
+    """필살기별로 쓸 수 있으면 True, 모양은 (..., 3). 배치(numpy·torch)도 받는다.
+    화면 3채널 뒤의 쿨타임 채널이 1개면 세 필살기가 쿨타임을 함께 쓰고, 3개면 따로 쓴다."""
+    ready = state[..., 0, 0, 3:] == 0
+    if ready.shape[-1] == 1:
+        shape = (*ready.shape[:-1], len(SPECIALS))
+        ready = ready.expand(shape) if hasattr(ready, 'expand') else np.broadcast_to(ready, shape)
+    return ready
 
 
 def action_mask(state):
-    """고를 수 있는 행동이면 True. 쿨타임 중이면 필살기가 False(MaskablePPO용)."""
-    return np.arange(len(ACTION_NAMES)) < (len(ACTION_NAMES) if special_ready(state) else N_BASIC)
+    """고를 수 있는 행동이면 True. 쿨타임 중인 필살기가 False(MaskablePPO용)."""
+    return np.concatenate([np.ones(N_BASIC, dtype=bool), specials_ready(state)])
+
+
+def random_action(state, rng):
+    """쓸 수 있는 행동 중에서 무작위로 고른다."""
+    return int(rng.choice(np.flatnonzero(action_mask(state))))
 
 
 class MoveSet(gym.Wrapper):
     """행동 번호 → 버튼. 0~16은 버튼 조합, 17~19는 필살기 커맨드.
     필살기는 상대가 왼쪽에 있으면 좌우를 뒤집어 넣고, 쓰고 나면 COOLDOWN걸음 동안 막힌다.
-    남은 쿨타임을 상태의 네 번째 채널로 붙여 에이전트가 볼 수 있게 한다."""
-    def __init__(self, env):
+    남은 쿨타임을 화면 뒤 채널로 붙여 에이전트가 볼 수 있게 한다.
+      separate: True(기본)면 필살기마다 쿨타임을 따로 둔다(채널 3개). False면 하나를 쓰면 셋 다 막힌다(채널 1개, 이전 방식).
+      bonus·penalty: 필살기를 쓴 뒤 HIT_WINDOW걸음 안에 상대가 피해를 입으면 +bonus, 아니면 -penalty를 보상에 더한다."""
+    def __init__(self, env, separate=True, bonus=0.0, penalty=0.0):
         super().__init__(env)
+        self.separate, self.bonus, self.penalty = separate, bonus, penalty
         buttons = env.unwrapped.buttons
 
         def press(combo):
@@ -153,36 +169,86 @@ class MoveSet(gym.Wrapper):
         }
         self.action_space = gym.spaces.Discrete(len(ACTION_NAMES))
         h, w, c = env.observation_space.shape
-        self.observation_space = gym.spaces.Box(low=0, high=255, shape=(h, w, c + 1), dtype=np.uint8)
-        self.cooldown = 0
+        n = len(SPECIALS) if separate else 1
+        self.observation_space = gym.spaces.Box(low=0, high=255, shape=(h, w, c + n), dtype=np.uint8)
+        self.cooldown = np.zeros(len(SPECIALS), dtype=int)  # 필살기별 남은 걸음(함께 쓰면 셋이 늘 같다)
         self.facing_left = False
+        self.pending = []  # [남은 판정 걸음, 그동안 상대가 입은 피해]
+        self.enemy_hp = 0
 
     def _observation(self, obs):
-        level = round(255 * self.cooldown / COOLDOWN)  # 0 = 쓸 수 있음, 255 = 방금 씀
-        return np.concatenate([obs, np.full((*obs.shape[:2], 1), level, dtype=np.uint8)], axis=-1)
+        cd = self.cooldown if self.separate else self.cooldown[:1]
+        levels = np.round(255 * cd / COOLDOWN).astype(np.uint8)  # 0 = 쓸 수 있음, 255 = 방금 씀
+        return np.concatenate([obs, np.broadcast_to(levels, (*obs.shape[:2], len(levels)))], axis=-1)
 
     def action_masks(self):  # MaskablePPO가 행동을 고르기 전에 부른다
-        return np.arange(len(ACTION_NAMES)) < (len(ACTION_NAMES) if self.cooldown == 0 else N_BASIC)
+        return np.concatenate([np.ones(N_BASIC, dtype=bool), self.cooldown == 0])
 
     def reset(self, **kwargs):
         obs, info = self.env.reset(**kwargs)
-        self.cooldown = 0
+        self.cooldown[:] = 0
         self.facing_left = False  # 라운드 시작에는 류가 왼쪽에 선다
+        self.pending = []
+        self.enemy_hp = self.env.full_hp
         return self._observation(obs), info
 
     def step(self, action):
+        self.cooldown = np.maximum(0, self.cooldown - 1)
         if action < N_BASIC:
             buttons = self._basic[action]
-            self.cooldown = max(0, self.cooldown - 1)
-        elif self.cooldown == 0:
-            buttons = self._special[self.facing_left][action - N_BASIC]
-            self.cooldown = COOLDOWN
+        elif self.cooldown[action - N_BASIC] == 0:
+            k = action - N_BASIC
+            buttons = self._special[self.facing_left][k]
+            if self.separate:
+                self.cooldown[k] = COOLDOWN
+            else:
+                self.cooldown[:] = COOLDOWN
+            if self.bonus or self.penalty:
+                self.pending.append([HIT_WINDOW[k], 0])
         else:  # 쿨타임 중에 고르면 가만히 있는다(에이전트는 마스크로 애초에 고르지 않는다)
             buttons = self._basic[0]
-            self.cooldown -= 1
         obs, reward, terminated, truncated, info = self.env.step(buttons)
         self.facing_left = info['agent_x'] > info['enemy_x']
+
+        # 판정 창 안의 필살기마다 상대가 입은 피해를 더하고, 창이 끝나면(또는 판이 끝나면) 보너스·벌점을 준다
+        dealt = max(0, self.enemy_hp - info['enemy_hp'])
+        self.enemy_hp = info['enemy_hp']
+        done = terminated or truncated
+        for p in self.pending:
+            p[0] -= 1
+            p[1] += dealt
+            if p[0] == 0 or done:
+                reward += self.bonus if p[1] > 0 else -self.penalty
+        self.pending = [p for p in self.pending if p[0] > 0 and not done]
         return self._observation(obs), reward, terminated, truncated, info
+
+
+class StateMix(gym.Wrapper):
+    """판마다 시작 상태(상대)를 하나 고른다. 최근 승률이 낮은 상대일수록 자주 고른다.
+    고를 확률 ∝ (1 − 최근 승률) + floor. 최근 승률은 판이 끝날 때마다 지수 이동 평균으로 갱신한다.
+    info['start_state']에 이번 판의 시작 상태를 넣는다."""
+    def __init__(self, env, states, seed=None, floor=0.1, decay=0.9):
+        super().__init__(env)
+        self.states, self.floor, self.decay = states, floor, decay
+        self.win_rate = np.zeros(len(states))
+        self.rng = np.random.default_rng(seed)
+        self.current = 0
+
+    def reset(self, **kwargs):
+        p = 1 - self.win_rate + self.floor
+        self.current = int(self.rng.choice(len(self.states), p=p / p.sum()))
+        self.unwrapped.load_state(self.states[self.current], retro.data.Integrations.ALL)
+        obs, info = self.env.reset(**kwargs)
+        info['start_state'] = self.states[self.current]
+        return obs, info
+
+    def step(self, action):
+        obs, reward, terminated, truncated, info = self.env.step(action)
+        info['start_state'] = self.states[self.current]
+        if terminated or truncated:
+            win = float(info['enemy_hp'] < 0)
+            self.win_rate[self.current] = self.decay * self.win_rate[self.current] + (1 - self.decay) * win
+        return obs, reward, terminated, truncated, info
 
 
 class RandomStart(gym.Wrapper):
@@ -244,15 +310,17 @@ class PygameViewer(gym.Wrapper):
         super().close()
 
 
-def make_env(render_mode=None, random_start=0, seed=None):
-    """DQN·PPO가 함께 쓰는 환경. 상태는 흑백 3시점 + 쿨타임 채널, 행동은 20가지.
-    random_start를 주면 판마다 처음 0~random_start걸음을 무작위로 움직인 뒤 넘긴다(학습용)."""
+def make_env(render_mode=None, random_start=0, seed=None, separate=True, bonus=0.0, penalty=0.0, state=STATE, states=None):
+    """DQN·PPO가 함께 쓰는 환경. 상태는 흑백 3시점 + 필살기별 쿨타임 채널 3개 = (100, 128, 6), 행동은 20가지.
+    random_start를 주면 판마다 처음 0~random_start걸음을 무작위로 움직인 뒤 넘긴다(학습용).
+    separate·bonus·penalty는 MoveSet 참고. state는 시작할 저장 상태(integration/의 Champion.Level<스테이지>.RyuVs<상대>).
+    states(목록)를 주면 판마다 그중 하나를 고른다(StateMix, 학습용)."""
     # integration/의 data.json·scenario.json·.state가 stable-retro 기본 파일보다 먼저 쓰인다
     if INTEGRATION_DIR not in getattr(retro.data.Integrations, 'CUSTOM_PATHS', []):
         retro.data.Integrations.add_custom_path(INTEGRATION_DIR)
     env = retro.make(
         game=GAME,
-        state=STATE,
+        state=states[0] if states else state,
         inttype=retro.data.Integrations.ALL,
         use_restricted_actions=retro.Actions.FILTERED,
         obs_type=retro.Observations.IMAGE,
@@ -260,5 +328,7 @@ def make_env(render_mode=None, random_start=0, seed=None):
     )
     if render_mode == 'human':
         env = PygameViewer(env)  # 속도는 PygameViewer가 60fps로 맞추므로 rendering은 끈다
-    env = MoveSet(StreetFighterWrapper(env))
+    env = MoveSet(StreetFighterWrapper(env), separate, bonus, penalty)
+    if states:
+        env = StateMix(env, states, seed)
     return RandomStart(env, random_start, seed) if random_start else env

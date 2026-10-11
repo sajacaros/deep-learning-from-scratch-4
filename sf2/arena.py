@@ -65,7 +65,7 @@ class FrameSink(gym.Wrapper):
 def worker(model_path, shm, conn, epsilon):
     import torch
     import stable_retro as retro
-    from dqn import QNet, mask_specials, random_action as dqn_random_action
+    from dqn import load_qnet, mask_specials, random_action as dqn_random_action
     from sf2_env import INTEGRATION_DIR, STATE, GAME, StreetFighterWrapper, MoveSet, action_mask
 
     torch.set_num_threads(1)  # 네 프로세스가 CPU를 나눠 쓰므로
@@ -77,26 +77,24 @@ def worker(model_path, shm, conn, epsilon):
                      obs_type=retro.Observations.IMAGE, render_mode=None)
     env = FrameSink(env, frame)
 
-    env = MoveSet(StreetFighterWrapper(env))
     random_action = lambda rng, state: dqn_random_action(state, rng)
     if model_path.endswith('.zip'):  # PPO(stable-baselines3) 체크포인트
         from sb3_contrib import MaskablePPO
         model = MaskablePPO.load(model_path, device='cpu', custom_objects={
             'learning_rate': 0.0, 'lr_schedule': lambda _: 0.0, 'clip_range': lambda _: 0.0})
         kind = 'PPO'
+        separate = min(model.observation_space.shape) > 4  # sb3는 (C, H, W)로 바꿔 저장한다
         act = lambda state: int(model.predict(state, deterministic=False, action_masks=action_mask(state))[0])
     else:
-        params = torch.load(model_path, map_location='cpu')
-        dueling = any(k.startswith('v.') for k in params)
-        qnet = QNet(env.action_space.n, dueling=dueling)
-        qnet.load_state_dict(params)
-        qnet.eval()
-        kind = 'Dueling' if dueling else ''
+        qnet = load_qnet(model_path)
+        kind = 'Dueling' if qnet.dueling else ''
+        separate = qnet.conv[0].in_channels > 4
 
         def act(state):
             with torch.no_grad():
                 x = torch.from_numpy(state).unsqueeze(0)
                 return mask_specials(qnet(x), x).argmax().item()
+    env = MoveSet(StreetFighterWrapper(env), separate)  # 모델이 본 것과 같은 쿨타임 방식
 
     state, info = env.reset()  # 첫 화면을 띄워 둔다
     conn.send(('ready', kind))

@@ -3,6 +3,7 @@
   uv run python sf2/evaluate.py runs/dqn runs/double runs/dueling runs/double_dueling --episodes 200
   uv run python sf2/evaluate.py runs/dueling/qnet_final.pt ...   # 파일을 직접 줘도 된다
   uv run python sf2/evaluate.py runs/ppo --episodes 200          # PPO도 같은 방식으로(--deterministic이면 확률이 가장 큰 행동)
+  uv run python sf2/evaluate.py runs/ppo/ppo_final.zip --blind runs/eval_actions.csv   # 화면을 안 보고 모델의 행동 비율대로만 뽑기
 
 결과 파일 옆에 <out>_actions.csv로 체크포인트별 행동 횟수도 남긴다(무작위 시작 구간은 빼고 모델이 고른 것만).
 
@@ -24,25 +25,32 @@ import numpy as np
 
 def evaluate(job):
     import torch
-    from dqn import QNet, mask_specials, random_action
-    from sf2_env import action_mask, make_env
+    from dqn import load_qnet, mask_specials, random_action
+    from sf2_env import STATE, action_mask, make_env
 
-    run, ckpt, episodes, max_random, device, seed, epsilon, deterministic = job
+    run, ckpt, episodes, max_random, device, seed, epsilon, deterministic, *rest = job
+    blind = rest[:1]
+    state = rest[1] if len(rest) > 1 else STATE
     torch.set_num_threads(1)
     torch.manual_seed(seed)
     rng = np.random.default_rng(seed)
-    env = make_env()
+    # 모델이 본 상태와 같은 환경을 띄운다(쿨타임 채널이 3개면 필살기별 쿨타임). 보너스·벌점은 평가에 쓰지 않는다
     if ckpt.endswith('.zip'):  # PPO(stable-baselines3). 학습률·클리핑 스케줄은 평가에 필요 없어 상수로 바꿔 읽는다
         from sb3_contrib import MaskablePPO
         model = MaskablePPO.load(ckpt, device=device, custom_objects={
             'learning_rate': 0.0, 'lr_schedule': lambda _: 0.0, 'clip_range': lambda _: 0.0})
+        separate = min(model.observation_space.shape) > 4  # sb3는 (C, H, W)로 바꿔 저장한다
+    else:
+        qnet = load_qnet(ckpt, device)
+        separate = qnet.conv[0].in_channels > 4
+    env = make_env(separate=separate, state=state)
+    if blind and blind[0] is not None:  # 화면을 보지 않고 정해 둔 행동 비율대로 뽑는다(쿨타임 중이면 필살기를 빼고 다시 맞춤)
+        def policy(state, probs=blind[0]):
+            p = probs * action_mask(state)
+            return int(rng.choice(len(p), p=p / p.sum()))
+    elif ckpt.endswith('.zip'):
         policy = lambda state: int(model.predict(state, deterministic=deterministic, action_masks=action_mask(state))[0])
     else:
-        params = torch.load(ckpt, map_location=device)
-        qnet = QNet(env.action_space.n, dueling=any(k.startswith('v.') for k in params)).to(device)
-        qnet.load_state_dict(params)
-        qnet.eval()
-
         def policy(state):
             with torch.no_grad():
                 x = torch.from_numpy(state).unsqueeze(0).to(device)
@@ -91,9 +99,19 @@ def main():
     p.add_argument('--deterministic', action='store_true')  # PPO만: 뽑지 않고 확률이 가장 큰 행동
     p.add_argument('--workers', type=int, default=40)
     p.add_argument('--device', default='cpu')
+    p.add_argument('--blind', help='<out>_actions.csv. 모델 대신 이 파일에 적힌 그 모델의 행동 비율대로만 뽑는다')
+    p.add_argument('--state', nargs='+', default=[None])  # 시작 저장 상태(여럿이면 상태마다 따로 평가, run 이름 뒤에 @상태)
     p.add_argument('--out', default='runs/eval.csv')
     args = p.parse_args()
 
+    freq = {}
+    if args.blind:
+        from sf2_env import ACTION_NAMES
+        for line in open(args.blind).read().splitlines()[1:]:
+            run, step, action, win, lose = line.split(',')
+            freq.setdefault((run, step), np.zeros(len(ACTION_NAMES)))[ACTION_NAMES.index(action)] = int(win) + int(lose)
+
+    from sf2_env import STATE
     jobs = []
     for run in args.runs:
         if run.endswith(('.pt', '.zip')):
@@ -101,12 +119,19 @@ def main():
         else:
             ckpts = glob.glob(os.path.join(run, 'qnet_[0-9]*.pt')) + glob.glob(os.path.join(run, 'ppo_*_steps.zip'))
         for ckpt in ckpts:
-            # 한 체크포인트를 여러 조각으로 나눠 프로세스를 고르게 쓴다
-            n_chunks = max(1, args.episodes // 10)
-            for c in range(n_chunks):
-                n = args.episodes // n_chunks + (c < args.episodes % n_chunks)
-                jobs.append((os.path.basename(run.rstrip('/')), ckpt, n, args.max_random, args.device,
-                             zlib.crc32(f'{ckpt}:{c}'.encode()), args.epsilon, args.deterministic))
+            probs, name = None, os.path.basename(run.rstrip('/'))
+            if args.blind:
+                m = re.search(r'(\d+)(?:_steps)?\.(?:pt|zip)$', ckpt)
+                step = m.group(1) if m else re.sub(r'^(qnet|ppo)_', '', os.path.splitext(os.path.basename(ckpt))[0])
+                probs, name = freq[(name, step)] / freq[(name, step)].sum(), name + '_blind'
+            for state in args.state:
+                label = name if state is None else f"{name}@{state.removeprefix('Champion.')}"
+                # 한 체크포인트를 여러 조각으로 나눠 프로세스를 고르게 쓴다
+                n_chunks = max(1, args.episodes // 10)
+                for c in range(n_chunks):
+                    n = args.episodes // n_chunks + (c < args.episodes % n_chunks)
+                    jobs.append((label, ckpt, n, args.max_random, args.device, zlib.crc32(f'{ckpt}:{c}'.encode()),
+                                 args.epsilon, args.deterministic, probs, state or STATE))
     print(f'{len(jobs)} jobs, {args.workers} workers', flush=True)
 
     rows = []

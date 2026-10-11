@@ -7,7 +7,7 @@ import argparse
 import numpy as np
 import torch
 
-from dqn import QNet, mask_specials, random_action
+from dqn import load_qnet, mask_specials, random_action
 from sf2_env import make_env
 
 
@@ -18,12 +18,8 @@ def main():
     p.add_argument('--epsilon', type=float, default=0.0)  # 같은 동작에 갇히면 0.02 정도로 올려본다
     args = p.parse_args()
 
-    env = make_env(render_mode='human')
-    params = torch.load(args.model, map_location='cpu')
-    dueling = any(k.startswith('v.') for k in params)  # Dueling DQN이면 V 갈래가 있다
-    qnet = QNet(env.action_space.n, dueling=dueling)
-    qnet.load_state_dict(params)
-    qnet.eval()
+    qnet = load_qnet(args.model)
+    env = make_env(render_mode='human', separate=qnet.conv[0].in_channels > 4)  # 모델이 본 것과 같은 쿨타임 방식
 
     rng = np.random.default_rng()
     for episode in range(args.episodes):
