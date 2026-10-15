@@ -137,6 +137,8 @@ def update(self):
   - **볼 곳**: `G(τ)`가 `G_t`로 바뀐 것뿐인데 **기댓값은 그대로**이고 분산만 줄어듦
     - 과거 보상 항은 기댓값이 `0`이라 빼도 편향이 생기지 않음
 - 이 형태를 **REINFORCE**라고 부름(1992년에 제안된 고전 알고리즘)
+  - 이름은 **RE**ward **I**ncrement = **N**onnegative **F**actor × **O**ffset **R**einforcement × **C**haracteristic **E**ligibility의 약자
+  - 가중치 변화량 = 0 이상의 학습률 × (보상 − 기준값) × `∇ log π`라는 갱신 규칙을 그대로 이름으로 만든 것
 ### 9.2.2 REINFORCE 구현
 - 예제 코드: [`s02_reinforce.py`](s02_reinforce.py) — [`s01_simple_pg.py`](s01_simple_pg.py)와의 차이는 `update()` 하나뿐
 ```python
