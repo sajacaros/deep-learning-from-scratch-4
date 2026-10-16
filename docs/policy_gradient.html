@@ -465,7 +465,7 @@ ol.steps li::before{content:counter(s);position:absolute;left:13px;top:10px;widt
   </tbody>
 </table></div>
 <h3>이 문서의 흐름: 질문 하나에 방법 하나</h3>
-<p>이 문서는 질문이 생길 때마다 방법을 하나씩 고쳐 가는 구성입니다. 앞의 넷은 9장, 뒤의 넷은 10장(10.2)의 내용입니다.</p>
+<p>이 문서는 질문이 생길 때마다 방법을 하나씩 고쳐 가는 구성입니다. 앞의 넷은 9장, 그다음 넷은 10장(10.2)의 내용이고, 마지막 하나는 책 밖의 방법입니다.</p>
 <ol class="steps">
 <li>“정책을 직접 학습해 볼까?”<br>→ <strong>정책 경사법</strong>(Policy Gradient)</li>
 <li>“현재 행동과 관계없는 이전 보상은 빼고, 행동 이후의 보상으로 학습하자.”<br>→ <strong>REINFORCE</strong></li>
@@ -475,6 +475,7 @@ ol.steps li::before{content:counter(s);position:absolute;left:13px;top:10px;widt
 <li>“비동기가 꼭 필요할까? 여러 환경을 한 배치로 묶어 함께 업데이트하자.”<br>→ <strong>A2C</strong>(Advantage Actor-Critic)</li>
 <li>“행동이 연속값이면, 분포에서 뽑지 말고 행동값을 바로 내면 어떨까?”<br>→ <strong>DDPG</strong>(Deep Deterministic Policy Gradient)</li>
 <li>“그런데 정책 업데이트가 너무 커서 학습이 불안정해지면 어떡하지?”<br>→ <strong>PPO</strong>(Proximal Policy Optimization)</li>
+<li>“LLM처럼 비평자가 정책만큼 크면? 비평자 없이 같은 질문의 답끼리 비교하자.”<br>→ <strong>GRPO</strong>(Group Relative Policy Optimization)</li>
 </ol>
 
 <h2 id="s9-1" data-group="정책 경사법의 발전" data-rail="기본" data-title="가장 간단한 정책 경사법">9.1 가장 간단한 정책 경사법 — 에피소드 하나의 결과로 모든 행동을 평가</h2>
@@ -1001,7 +1002,63 @@ L(\theta) = \mathbb{E}\Bigl[\min\bigl(r\,A,\; \mathrm{clip}(r,\,1-\varepsilon,\,
 </ul>
 <p>왜 한 번에 조금씩만 바꿀까요? \(A\)는 몇 번 해 보고 낸 추정값이라 틀릴 수 있습니다. 한 번에 크게 바꿨다가 틀리면 되돌리기 어렵습니다. 특히 확률이 0 근처까지 떨어지면 그 행동을 다시 해 보지 않으니, 좋은 행동이었다는 것을 알아챌 기회도 사라집니다.</p></div>
 <p>이렇게 묶어 두면 모은 데이터 한 묶음으로 여러 번 갱신해도 정책이 멀리 달아나지 않습니다. 9장의 정책 경사법은 데이터를 한 번 쓰고 버렸는데, PPO는 같은 데이터를 몇 번씩 다시 씁니다. TRPO처럼 KL 제약을 푸는 복잡한 최적화 없이, 손실 함수 하나만 바꾸면 되는 것도 장점입니다.</p>
-<div class="callout"><p><strong>기억할 점</strong><br>PPO는 정책 경사법 계열의 사실상 표준이고, 대규모 언어 모델의 RLHF에도 쓰입니다. 아래 부록의 스트리트 파이터 2 실험도 PPO로 했습니다.</p></div>
+<div class="callout"><p><strong>기억할 점</strong><br>PPO는 정책 경사법 계열의 사실상 표준이고, 대규모 언어 모델의 RLHF에도 쓰입니다. 바로 다음 장의 <a href="#grpo">GRPO</a>는 이 PPO를 LLM에 맞게 가볍게 고친 것입니다. 아래 부록의 스트리트 파이터 2 실험도 PPO로 했습니다.</p></div>
+
+<h2 id="grpo" data-group="더 나아간 정책 경사법" data-rail="GRPO" data-title="GRPO">GRPO — 비평자 대신 같은 질문의 답끼리 비교</h2>
+<p class="name-gloss"><b>GRPO</b> = Group Relative Policy Optimization</p>
+<div class="easy-note"><div class="easy-kicker">이 장의 한 줄</div>
+<p>PPO에서 비평자를 빼고, <strong>같은 질문에 낸 답 여러 개의 평균 점수</strong>를 베이스라인으로 씁니다.</p></div>
+<p>GRPO는 책에 없는 방법입니다. 대규모 언어 모델(LLM)이 수학 문제를 더 잘 풀도록 학습하려고 DeepSeekMath 논문(2024)에서 제안했고, 이후 DeepSeek-R1의 학습에도 쓰였습니다. 새로운 생각은 하나뿐이라, 앞에서 본 <a href="#s9-3">베이스라인</a>(도서 9.3)과 <a href="#s10-2-3">PPO</a>(도서 10.2.3)만 알면 바로 이해할 수 있습니다.</p>
+<h3>LLM을 강화학습으로 보기: 토큰 하나가 행동 하나</h3>
+<p>LLM이 답을 쓰는 과정도 에이전트가 행동을 고르는 과정으로 볼 수 있습니다. 정책 \(\pi_\theta\)는 언어 모델 자체이고, 행동은 다음에 쓸 토큰입니다.</p>
+<div class="table-scroll"><table>
+  <thead><tr><th>강화학습</th><th>LLM에서는</th></tr></thead>
+  <tbody>
+  <tr><td>상태</td><td>질문과 지금까지 쓴 답</td></tr>
+  <tr><td>행동</td><td>다음 토큰 하나</td></tr>
+  <tr><td>에피소드</td><td>답 하나를 끝까지 쓰는 것</td></tr>
+  <tr><td>보상</td><td>답을 다 쓴 뒤 한 번. 예를 들어 정답이면 1, 오답이면 0</td></tr>
+  </tbody>
+</table></div>
+<h3>문제: PPO의 비평자가 너무 무거움</h3>
+<p>PPO는 어드밴티지를 구하려고 비평자 \(V(s)\)를 함께 학습합니다. LLM에서는 이 비평자도 보통 정책과 비슷한 크기의 언어 모델이라, 메모리와 계산이 거의 두 배로 듭니다. 게다가 보상이 답 끝에 한 번만 나오니, 답 중간의 토큰마다 “지금 얼마나 잘하고 있나”를 맞히는 비평자를 학습하기도 어렵습니다.</p>
+<h3>핵심 아이디어: 같은 질문의 답 여러 개를 상대평가</h3>
+<p>GRPO는 질문 하나에 답을 \(G\)개 뽑고, 각 답의 보상 \(r_i\)를 그 그룹의 평균과 비교합니다. 평균보다 좋은 답은 더 자주, 나쁜 답은 덜 쓰도록 고칩니다.</p>
+<p>비유하자면 상대평가입니다. 아주 어려운 문제라서 모두 점수가 낮아도 그중 나은 답은 칭찬받고, 쉬운 문제라서 모두 점수가 높아도 그중 못한 답은 꾸중을 듣습니다. 9.3에서 상태가 원래 유리하거나 불리해서 생기는 몫을 \(V(S_t)\)로 걷어냈다면, GRPO는 문제의 난이도 몫을 그룹 평균으로 걷어냅니다.</p>
+<div class="formula"><span class="label">GRPO의 어드밴티지 (DeepSeekMath 논문)</span>\[
+\hat{A}_{i} = \frac{r_i - \mathrm{mean}(\{r_1, \dots, r_G\})}{\mathrm{std}(\{r_1, \dots, r_G\})}
+\]</div>
+<ul class="syms">
+<li>\(G\): 질문 하나에 뽑는 답의 개수(그룹 크기)</li>
+<li>\(r_i\): \(i\)번째 답이 받은 보상. PPO의 확률비 \(r\)과는 다른 기호입니다</li>
+<li>\(\mathrm{mean}, \mathrm{std}\): 그룹 안 보상의 평균과 표준편차. 평균을 빼면 베이스라인, 표준편차로 나누면 문제마다 점수 폭을 맞추는 역할입니다</li>
+<li>\(\hat{A}_i\): \(i\)번째 답의 어드밴티지. 그 답의 모든 토큰에 같은 값을 씁니다</li>
+</ul>
+<p>예를 들어 답 4개 중 2개가 정답이면 보상은 (1, 0, 0, 1)이고, 평균 0.5와 표준편차 0.5로 계산하면 어드밴티지는 (+1, −1, −1, +1)입니다. 정답을 쓴 토큰들은 확률이 올라가고, 오답을 쓴 토큰들은 내려갑니다.</p>
+<h3>목적 함수: PPO의 자르기에 KL 벌점을 더함</h3>
+<p>나머지는 PPO와 같습니다. 확률비를 \([1-\varepsilon, 1+\varepsilon]\)로 자르고, 위의 \(\hat{A}_i\)를 곱합니다. 여기에 학습 전 모델 \(\pi_{\text{ref}}\)에서 너무 멀어지지 않도록 KL 발산 벌점을 손실에 직접 더합니다.</p>
+<div class="formula"><span class="label">GRPO의 목적 함수 (DeepSeekMath 논문, 표기 단순화)</span>\[
+J(\theta) = \mathbb{E}\Bigl[\frac{1}{G}\sum_{i=1}^{G}\frac{1}{|o_i|}\sum_{t=1}^{|o_i|}\Bigl(\min\bigl(\rho_{i,t}\hat{A}_{i},\; \mathrm{clip}(\rho_{i,t},1-\varepsilon,1+\varepsilon)\,\hat{A}_{i}\bigr) - \beta\, D_{\mathrm{KL}}\bigl(\pi_\theta \,\|\, \pi_{\text{ref}}\bigr)\Bigr)\Bigr],
+\qquad \rho_{i,t} = \frac{\pi_\theta(o_{i,t}\mid q, o_{i,&lt;t})}{\pi_{\theta_{\text{old}}}(o_{i,t}\mid q, o_{i,&lt;t})}
+\]</div>
+<ul class="syms">
+<li>\(q\): 질문, \(o_i\): \(i\)번째 답, \(|o_i|\): 그 답의 토큰 수, \(o_{i,t}\): 그 답의 \(t\)번째 토큰</li>
+<li>\(\rho_{i,t}\): PPO의 확률비 \(r\)과 같은 것. 보상 \(r_i\)와 헷갈리지 않게 다른 글자로 썼습니다</li>
+<li>\(\pi_{\text{ref}}\): 기준 모델. 보통 강화학습을 시작하기 전의 모델입니다</li>
+<li>\(\beta\): KL 벌점의 세기</li>
+</ul>
+<p>쉽게 말하면, 답 하나하나의 토큰마다 PPO 손실을 계산해 평균 내고, 원래 모델에서 너무 멀어진 만큼 감점하는 것입니다.</p>
+<div class="table-scroll"><table>
+  <thead><tr><th></th><th>PPO</th><th>GRPO</th></tr></thead>
+  <tbody>
+  <tr><td>베이스라인</td><td>비평자 \(V(s)\)의 예측</td><td>같은 질문에 낸 답들의 평균 보상</td></tr>
+  <tr><td>학습하는 신경망</td><td>정책과 비평자</td><td>정책 하나</td></tr>
+  <tr><td>KL 벌점</td><td>LLM 학습(RLHF)에서는 보상에 섞음</td><td>손실에 직접 더함</td></tr>
+  </tbody>
+</table></div>
+<div class="callout"><p><strong>기억할 점</strong><br>GRPO가 바꾼 것은 베이스라인 하나입니다. 비평자를 학습하는 대신 답을 여러 개 뽑아 서로 비교합니다. 9.3의 생각이 그대로 살아 있는 것입니다.</p></div>
+<div class="callout gray"><p><strong>약점</strong><br>질문 하나마다 답을 \(G\)개씩 생성해야 해서 샘플링 비용이 큽니다. 또 답이 모두 맞거나 모두 틀리면 모든 \(\hat{A}_i\)가 0이 되어 그 질문에서는 배울 것이 없습니다. 너무 쉽거나 너무 어려운 문제는 학습에 도움이 되지 않는 것입니다.</p></div>
+<p class="tnote">출처: Shao et al., <a href="https://arxiv.org/abs/2402.03300">DeepSeekMath: Pushing the Limits of Mathematical Reasoning in Open Language Models</a> (2024).</p>
 
 <h2 data-group="정리와 응용" data-rail="정리" data-title="한눈에 정리">9.6 · 10.2 한눈에 정리</h2>
 <div class="easy-note"><div class="easy-kicker">이 장의 한 줄</div>
@@ -1031,6 +1088,7 @@ L(\theta) = \mathbb{E}\Bigl[\min\bigl(r\,A,\; \mathrm{clip}(r,\,1-\varepsilon,\,
   <tr><td>A2C</td><td>A3C의 복잡한 비동기 구조</td><td>여러 환경을 한 배치로 묶어 동기로 갱신</td></tr>
   <tr><td>DDPG</td><td>연속 행동에서 샘플링 때문에 흔들림, 경험 재생 불가</td><td>행동값을 결정적으로 출력하고 Q 신경망을 따라 경사 상승</td></tr>
   <tr><td>PPO</td><td>한 번의 갱신으로 정책이 무너짐</td><td>확률비를 \([1-\varepsilon, 1+\varepsilon]\)로 잘라 갱신 폭을 묶음</td></tr>
+  <tr><td>GRPO(책 밖)</td><td>LLM에서 비평자가 정책만큼 무거움</td><td>비평자를 빼고 같은 질문에 낸 답들의 평균 보상을 베이스라인으로 씀</td></tr>
   </tbody>
 </table></div>
 <div class="verdict"><div class="vk">한 문장 요약</div>
